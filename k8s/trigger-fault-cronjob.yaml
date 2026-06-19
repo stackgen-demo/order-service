@@ -1,0 +1,39 @@
+# CronJob injects demo faults via X-Demo-Fault on POST /api/orders.
+# Set DEMO_FAULT on this container only (not on aiden-demo).
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: order-service-trigger-fault
+  namespace: aiden-demo
+  labels:
+    app.kubernetes.io/part-of: aiden-demo-stack
+spec:
+  schedule: "*/2 * * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 2
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          restartPolicy: Never
+          containers:
+            - name: curl
+              image: curlimages/curl:8.5.0
+              env:
+                - name: DEMO_FAULT
+                  value: schema
+              command:
+                - sh
+                - -c
+                - |
+                  set -eu
+                  for i in $(seq 1 10); do
+                    code=$(curl -s -o /dev/null -w "%{http_code}" \
+                      -X POST "http://aiden-demo/api/orders" \
+                      -H "Content-Type: application/json" \
+                      -H "X-Demo-Fault: ${DEMO_FAULT}" \
+                      -d "{\"customer_email\":\"cron${i}@example.com\",\"total_amount\":42.5}")
+                    echo "attempt ${i} fault=${DEMO_FAULT}: HTTP ${code}"
+                    sleep 1
+                  done

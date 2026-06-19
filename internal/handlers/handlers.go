@@ -3,10 +3,13 @@ package handlers
 import (
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"os"
+	"runtime/debug"
 	"time"
 
+	"github.com/appcd-dev/order-service/internal/fault"
 	"github.com/appcd-dev/order-service/internal/logger"
 )
 
@@ -47,8 +50,9 @@ func (h APIInfoHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			},
 			"orders": map[string]string{
 				"list":   "GET /api/orders",
-				"create": "POST /api/orders (intentionally returns 500)",
+				"create": "POST /api/orders (X-Demo-Fault header selects fault mode)",
 			},
+			"demo_fault_header": fault.HeaderName,
 		},
 	})
 }
@@ -74,6 +78,38 @@ func logRequest(r *http.Request, status int, duration time.Duration) {
 		return
 	}
 	logger.Info("Request completed", fields)
+}
+
+func withRecovery(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		defer func() {
+			recovered := recover()
+			if recovered == nil {
+				return
+			}
+
+			stack := string(debug.Stack())
+			logger.Error("Request panicked", map[string]any{
+				"http": map[string]any{
+					"status_code": http.StatusInternalServerError,
+					"method":      r.Method,
+					"url":         r.URL.Path,
+				},
+				"error": map[string]any{
+					"kind":       "UnhandledPanic",
+					"message":    fmt.Sprint(recovered),
+					"root_cause": "Simulated unhandled panic in order creation path",
+					"stack":      stack,
+				},
+			})
+
+			writeJSON(w, http.StatusInternalServerError, map[string]string{
+				"error": "internal server error",
+			})
+		}()
+
+		next.ServeHTTP(w, r)
+	})
 }
 
 func withLogging(next http.Handler) http.Handler {
@@ -102,7 +138,7 @@ func NewRouter(database *sql.DB) http.Handler {
 	mux.Handle("GET /api/users", withLogging(UsersListHandler{DB: database}))
 	mux.Handle("POST /api/users", withLogging(UsersCreateHandler{DB: database}))
 	mux.Handle("GET /api/orders", withLogging(OrdersListHandler{DB: database}))
-	mux.Handle("POST /api/orders", withLogging(OrdersCreateHandler{DB: database}))
+	mux.Handle("POST /api/orders", withRecovery(withLogging(OrdersCreateHandler{DB: database})))
 	mux.Handle("/", withLogging(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
 	})))

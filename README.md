@@ -12,9 +12,37 @@ Service name in Datadog: **`order-service`**
 | `/api/users` | GET | `200` — list users |
 | `/api/users` | POST | `201` — create user (works) |
 | `/api/orders` | GET | `200` — list orders |
-| `/api/orders` | POST | **`500` — schema mismatch (intentional)** |
+| `/api/orders` | POST | **`500` default** — schema mismatch; other modes via `X-Demo-Fault` header |
 
-### The intentional bug
+### Demo fault injection (`X-Demo-Fault`)
+
+Triggers (CronJob, curl, scripts) select the failure mode. The app Deployment has **no fault env vars**.
+
+| Header value | HTTP | `error.kind` | Use case |
+|--------------|------|--------------|----------|
+| *(omit)* or `schema` | 500 | `DatabaseSchemaMismatch` | Schema drift RCA → fix `cmd/initdb/main.go` |
+| `dependency` | 502 | `DownstreamPaymentFailure` | Downstream outage narrative |
+| `timeout` | 504 | `DownstreamPaymentTimeout` | Latency / timeout RCA |
+| `panic` | 500 | `UnhandledPanic` | Crash / stack trace in logs |
+| `locked` | 500 | `DatabaseLocked` | DB contention analogue |
+| `healthy` | 201 | — | Recovery demo (monitor should clear) |
+
+Unknown header → **400** `unknown demo fault`.
+
+```bash
+# Local
+DEMO_FAULT=dependency ./scripts/trigger-fault.sh
+curl -X POST http://localhost:3005/api/orders \
+  -H "Content-Type: application/json" \
+  -H "X-Demo-Fault: dependency" \
+  -d '{"customer_email":"bob@example.com","total_amount":42.50}'
+
+# K8s — patch CronJob fault without redeploying the app
+kubectl -n aiden-demo patch cronjob order-service-trigger-fault \
+  --type=json -p='[{"op":"replace","path":"/spec/jobTemplate/spec/template/spec/containers/0/env/0/value","value":"dependency"}]'
+```
+
+### The intentional bug (schema mode)
 
 The handler in `internal/handlers/orders.go` inserts into:
 
@@ -130,7 +158,7 @@ On `POST /api/orders` failure:
 **5xx rate (APM):**
 
 ```text
-sum:trace.http.request.hits{service:order-service,http.status_code:500}.as_count()
+sum:trace.http.request.hits{service:order-service,http.status_code:50*}.as_count()
 ```
 
 **Root cause (logs):**
@@ -185,7 +213,8 @@ datadog-5xx-test-service/
 │       ├── handlers.go
 │       ├── users.go
 │       └── orders.go
-├── scripts/trigger-5xx.sh
+├── scripts/trigger-fault.sh
+├── scripts/trigger-5xx.sh   # alias → trigger-fault.sh (schema default)
 ├── docker-compose.yml
 ├── Dockerfile
 ├── Makefile
@@ -216,21 +245,28 @@ GHCR packages default to private. After the first successful run, make it public
 
 ## Deploy to Kubernetes
 
-Manifests live in [`k8s/`](k8s/) (Deployment + ClusterIP Service, with `/health` readiness/liveness probes):
+Manifests in [`k8s/`](k8s/) deploy a lean stack into `aiden-demo` (app + one
+Datadog Agent for APM traces only):
+
+| File | What it creates |
+|------|-----------------|
+| `k8s/stack.yaml` | Namespace, 1× Datadog Agent, `aiden-demo` Deployment + Services |
+| `k8s/datadog-secret.yaml` | Placeholder `datadog-secret` |
+| `k8s/trigger-fault-cronjob.yaml` | CronJob sends `X-Demo-Fault` (env `DEMO_FAULT` on curl container only) |
 
 ```bash
-kubectl apply -f k8s/
-kubectl rollout status deployment/order-service
-kubectl port-forward svc/order-service 3005:80
+kubectl apply -f k8s/stack.yaml
+DD_API_KEY=<us3-key> ./scripts/apply-datadog-secret.sh
+kubectl apply -f k8s/trigger-fault-cronjob.yaml
+```
+
+```bash
+kubectl -n aiden-demo rollout status deployment/aiden-demo
+kubectl -n aiden-demo port-forward svc/aiden-demo 3005:80
 curl http://localhost:3005/health
 ```
 
-To deploy a specific build, set the image to a pinned tag:
-
-```bash
-kubectl set image deployment/order-service \
-  order-service=ghcr.io/stackgen-demo/order-service:sha-<commit>
-```
+Traces go to `datadog-agent:8126` → Datadog US3 (`service:order-service`).
 
 ## Make targets
 
@@ -239,7 +275,7 @@ kubectl set image deployment/order-service \
 | `make init-db` | Create SQLite DB with mismatched schema |
 | `make run` | Start the API locally |
 | `make build` | Build binaries to `bin/` |
-| `make trigger-5xx` | Send repeated failing requests |
+| `make trigger-5xx` | Send repeated failing requests (`DEMO_FAULT=schema`) |
 | `make docker-up` | Start app + Datadog agent |
 
 ## License
