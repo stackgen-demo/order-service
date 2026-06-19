@@ -192,6 +192,46 @@ datadog-5xx-test-service/
 └── README.md
 ```
 
+## CI/CD: Docker image (GitHub Container Registry)
+
+`.github/workflows/docker-publish.yml` builds a multi-arch (`linux/amd64`, `linux/arm64`) image and publishes it to **GHCR** on every push to `main` and on `v*.*.*` tags. Pull requests build the image to verify it compiles but do not push.
+
+Published image:
+
+```text
+ghcr.io/stackgen-demo/order-service:latest        # default branch
+ghcr.io/stackgen-demo/order-service:main          # branch builds
+ghcr.io/stackgen-demo/order-service:1.2.3         # semver tags
+ghcr.io/stackgen-demo/order-service:sha-<commit>  # immutable per-commit
+```
+
+No secrets are required — the workflow authenticates with the built-in `GITHUB_TOKEN`.
+
+### Make the image public (one-time)
+
+GHCR packages default to private. After the first successful run, make it public so the k8s cluster can pull without credentials:
+
+1. Repo → **Packages** → `order-service` → **Package settings**
+2. **Danger Zone** → **Change visibility** → **Public**
+
+## Deploy to Kubernetes
+
+Manifests live in [`k8s/`](k8s/) (Deployment + ClusterIP Service, with `/health` readiness/liveness probes):
+
+```bash
+kubectl apply -f k8s/
+kubectl rollout status deployment/order-service
+kubectl port-forward svc/order-service 3005:80
+curl http://localhost:3005/health
+```
+
+To deploy a specific build, set the image to a pinned tag:
+
+```bash
+kubectl set image deployment/order-service \
+  order-service=ghcr.io/stackgen-demo/order-service:sha-<commit>
+```
+
 ## Make targets
 
 | Command | Description |
