@@ -264,5 +264,5 @@ func logOrderFault(r *http.Request, status int, message string, errFields map[st
 		"error":   errFields,
 		"context": context,
 	}
-	logger.Error(message, fields)
+	logger.ErrorContext(r.Context(), message, fields)
 }

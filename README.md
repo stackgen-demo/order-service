@@ -245,12 +245,12 @@ GHCR packages default to private. After the first successful run, make it public
 
 ## Deploy to Kubernetes
 
-Manifests in [`k8s/`](k8s/) deploy a lean stack into `aiden-demo` (app + one
-Datadog Agent for APM traces only):
+Manifests in [`k8s/`](k8s/) deploy a lean stack into `aiden-demo` (app + Datadog
+Agent DaemonSet for APM traces and container log collection):
 
 | File | What it creates |
 |------|-----------------|
-| `k8s/stack.yaml` | Namespace, 1× Datadog Agent, `aiden-demo` Deployment + Services |
+| `k8s/stack.yaml` | Namespace, Datadog Agent DaemonSet (APM + logs), `aiden-demo` Deployment + Services |
 | `k8s/datadog-secret.yaml` | Placeholder `datadog-secret` |
 | `k8s/trigger-fault-cronjob.yaml` | CronJob sends `X-Demo-Fault` (env `DEMO_FAULT` on curl container only) |
 
@@ -258,6 +258,8 @@ Datadog Agent for APM traces only):
 kubectl apply -f k8s/stack.yaml
 DD_API_KEY=<us3-key> ./scripts/apply-datadog-secret.sh
 kubectl apply -f k8s/trigger-fault-cronjob.yaml
+# after code changes:
+./scripts/deploy-aiden-demo.sh
 ```
 
 ```bash
@@ -266,7 +268,8 @@ kubectl -n aiden-demo port-forward svc/aiden-demo 3005:80
 curl http://localhost:3005/health
 ```
 
-Traces go to `datadog-agent:8126` → Datadog US3 (`service:order-service`).
+Traces and JSON logs go to the node-local Datadog Agent → Datadog US3 (`service:order-service`, `env:demo`).
+Query errors with: `service:order-service status:error @error.kind:DatabaseSchemaMismatch`.
 
 ## Make targets
 

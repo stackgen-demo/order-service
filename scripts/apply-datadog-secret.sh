@@ -24,8 +24,15 @@ kubectl -n "$NAMESPACE" create secret generic "$SECRET_NAME" \
   --from-literal=api-key="$api_key" \
   --dry-run=client -o yaml | kubectl apply -f -
 
-kubectl -n "$NAMESPACE" rollout restart deployment/datadog-agent
-kubectl -n "$NAMESPACE" rollout status deployment/datadog-agent --timeout=120s
+kubectl -n "$NAMESPACE" delete deployment datadog-agent --ignore-not-found
+if kubectl -n "$NAMESPACE" get daemonset datadog-agent >/dev/null 2>&1; then
+  kubectl -n "$NAMESPACE" rollout restart daemonset/datadog-agent
+  kubectl -n "$NAMESPACE" rollout status daemonset/datadog-agent --timeout=180s
+else
+  kubectl -n "$NAMESPACE" rollout restart deployment/datadog-agent
+  kubectl -n "$NAMESPACE" rollout status deployment/datadog-agent --timeout=120s
+fi
+kubectl -n "$NAMESPACE" rollout restart deployment/aiden-demo
 kubectl -n "$NAMESPACE" rollout status deployment/aiden-demo --timeout=120s
 
-echo "datadog-secret updated in namespace $NAMESPACE; agent restarted."
+echo "datadog-secret updated in namespace $NAMESPACE; agent and app restarted."

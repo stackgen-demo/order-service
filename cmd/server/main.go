@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"log"
 	"net/http"
 	"os"
 
@@ -10,6 +9,7 @@ import (
 	"github.com/DataDog/dd-trace-go/v2/ddtrace/tracer"
 	"github.com/appcd-dev/order-service/internal/db"
 	"github.com/appcd-dev/order-service/internal/handlers"
+	"github.com/appcd-dev/order-service/internal/logger"
 )
 
 func main() {
@@ -23,7 +23,8 @@ func main() {
 
 	database, err := db.Open()
 	if err != nil {
-		log.Fatalf("failed to open database: %v", err)
+		logger.Error("failed to open database", map[string]any{"error": err.Error()})
+		os.Exit(1)
 	}
 	defer database.Close()
 
@@ -32,11 +33,15 @@ func main() {
 	port := envOrDefault("PORT", "3000")
 	addr := fmt.Sprintf(":%s", port)
 
-	log.Printf("%s listening on http://localhost:%s", service, port)
-	log.Printf("POST /api/orders is configured to fail with HTTP 500 (schema mismatch)")
+	logger.Info(service+" listening", map[string]any{
+		"port": port,
+		"addr": addr,
+	})
+	logger.Info("POST /api/orders default fault mode is schema mismatch (HTTP 500)", nil)
 
 	if err := http.ListenAndServe(addr, handler); err != nil {
-		log.Fatalf("server failed: %v", err)
+		logger.Error("server failed", map[string]any{"error": err.Error()})
+		os.Exit(1)
 	}
 }
 

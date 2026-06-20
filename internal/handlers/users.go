@@ -112,7 +112,7 @@ func logHandlerError(r *http.Request, status int, message string, err error, ext
 	for key, value := range extra {
 		fields[key] = value
 	}
-	logger.Error(message, fields)
+	logger.ErrorContext(r.Context(), message, fields)
 }
 
 func errorKind(err error) string {

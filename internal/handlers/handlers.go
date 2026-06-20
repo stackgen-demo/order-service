@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"fmt"
@@ -63,7 +64,7 @@ func writeJSON(w http.ResponseWriter, status int, payload any) {
 	_ = json.NewEncoder(w).Encode(payload)
 }
 
-func logRequest(r *http.Request, status int, duration time.Duration) {
+func logRequest(ctx context.Context, r *http.Request, status int, duration time.Duration) {
 	fields := map[string]any{
 		"http": map[string]any{
 			"status_code": status,
@@ -74,10 +75,10 @@ func logRequest(r *http.Request, status int, duration time.Duration) {
 	}
 
 	if status >= 500 {
-		logger.Error("Request completed with server error", fields)
+		logger.ErrorContext(ctx, "Request completed with server error", fields)
 		return
 	}
-	logger.Info("Request completed", fields)
+	logger.InfoContext(ctx, "Request completed", fields)
 }
 
 func withRecovery(next http.Handler) http.Handler {
@@ -89,7 +90,7 @@ func withRecovery(next http.Handler) http.Handler {
 			}
 
 			stack := string(debug.Stack())
-			logger.Error("Request panicked", map[string]any{
+			logger.ErrorContext(r.Context(), "Request panicked", map[string]any{
 				"http": map[string]any{
 					"status_code": http.StatusInternalServerError,
 					"method":      r.Method,
@@ -117,7 +118,7 @@ func withLogging(next http.Handler) http.Handler {
 		start := time.Now()
 		recorder := &statusRecorder{ResponseWriter: w, status: http.StatusOK}
 		next.ServeHTTP(recorder, r)
-		logRequest(r, recorder.status, time.Since(start))
+		logRequest(r.Context(), r, recorder.status, time.Since(start))
 	})
 }
 

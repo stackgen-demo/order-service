@@ -1,21 +1,57 @@
-# Lean aiden-demo stack: app + single Datadog Agent (APM traces only, US3).
-# Secret: kubectl -n aiden-demo create secret generic datadog-secret --from-literal=api-key=<KEY>
-# Upgrade from DaemonSet: kubectl -n aiden-demo delete daemonset datadog-agent --ignore-not-found
+# aiden-demo stack: order-service + Datadog Agent (APM traces + container logs, US3).
+# Secret: DD_API_KEY=<key> ./scripts/apply-datadog-secret.sh
+# Upgrade from Deployment agent: kubectl -n aiden-demo delete deployment datadog-agent --ignore-not-found
 ---
 apiVersion: v1
 kind: Namespace
 metadata:
   name: aiden-demo
 ---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: datadog-agent
+  namespace: aiden-demo
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: datadog-agent-aiden-demo
+rules:
+  - apiGroups: [""]
+    resources: [services, events, endpoints, pods, nodes, componentstatuses]
+    verbs: [get, list, watch]
+  - apiGroups: [""]
+    resources: [configmaps]
+    resourceNames: [datadog-leader-election, datadog-custom-metrics]
+    verbs: [get, update]
+  - apiGroups: [""]
+    resources: [configmaps]
+    verbs: [create]
+  - nonResourceURLs: ["/metrics", "/metrics/slis"]
+    verbs: [get]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: datadog-agent-aiden-demo
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: datadog-agent-aiden-demo
+subjects:
+  - kind: ServiceAccount
+    name: datadog-agent
+    namespace: aiden-demo
+---
 apiVersion: apps/v1
-kind: Deployment
+kind: DaemonSet
 metadata:
   name: datadog-agent
   namespace: aiden-demo
   labels:
     app: datadog-agent
 spec:
-  replicas: 1
   selector:
     matchLabels:
       app: datadog-agent
@@ -24,6 +60,7 @@ spec:
       labels:
         app: datadog-agent
     spec:
+      serviceAccountName: datadog-agent
       containers:
         - name: agent
           image: gcr.io/datadoghq/agent:7
@@ -39,25 +76,50 @@ spec:
             - name: DD_SITE
               value: us3.datadoghq.com
             - name: DD_HOSTNAME
-              value: aiden-demo-agent
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
             - name: DD_APM_ENABLED
               value: "true"
             - name: DD_APM_NON_LOCAL_TRAFFIC
               value: "true"
             - name: DD_LOGS_ENABLED
-              value: "false"
+              value: "true"
+            - name: DD_LOGS_CONFIG_CONTAINER_COLLECT_ALL
+              value: "true"
             - name: DD_ENABLE_PAYLOADS_SERIES
               value: "false"
             - name: DD_ENABLE_PAYLOADS_EVENTS
               value: "false"
             - name: DD_ENABLE_PAYLOADS_SERVICE_CHECKS
               value: "false"
+            - name: DD_COLLECT_KUBERNETES_EVENTS
+              value: "false"
+          volumeMounts:
+            - name: pointerdir
+              mountPath: /opt/datadog-agent/run
+            - name: logpodpath
+              mountPath: /var/log/pods
+              readOnly: true
+            - name: dockercontainers
+              mountPath: /var/lib/docker/containers
+              readOnly: true
           resources:
             requests:
               cpu: 50m
               memory: 128Mi
             limits:
               memory: 256Mi
+      volumes:
+        - name: pointerdir
+          hostPath:
+            path: /opt/datadog-agent/run
+        - name: logpodpath
+          hostPath:
+            path: /var/log/pods
+        - name: dockercontainers
+          hostPath:
+            path: /var/lib/docker/containers
 ---
 apiVersion: v1
 kind: Service
@@ -87,6 +149,8 @@ spec:
     metadata:
       labels:
         app: aiden-demo
+      annotations:
+        ad.datadoghq.com/aiden-demo.logs: '[{"source":"go","service":"order-service","tags":["env:demo"]}]'
     spec:
       containers:
         - name: aiden-demo
@@ -105,11 +169,15 @@ spec:
             - name: DD_ENV
               value: demo
             - name: DD_VERSION
-              value: "1.0.0"
+              value: "1.0.1"
             - name: DD_TRACE_ENABLED
               value: "true"
+            - name: DD_LOGS_INJECTION
+              value: "true"
             - name: DD_AGENT_HOST
-              value: datadog-agent
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.hostIP
             - name: DD_TRACE_AGENT_PORT
               value: "8126"
           readinessProbe:
