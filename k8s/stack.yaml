@@ -109,6 +109,10 @@ spec:
           ports:
             - name: traceport
               containerPort: 8126
+            - name: otlp-grpc
+              containerPort: 4317
+            - name: otlp-http
+              containerPort: 4318
           env:
             - name: DD_API_KEY
               valueFrom:
@@ -141,6 +145,10 @@ spec:
               value: "false"
             - name: DD_COLLECT_KUBERNETES_EVENTS
               value: "false"
+            - name: DD_OTLP_CONFIG_RECEIVER_PROTOCOLS_GRPC_ENDPOINT
+              value: "0.0.0.0:4317"
+            - name: DD_OTLP_CONFIG_RECEIVER_PROTOCOLS_HTTP_ENDPOINT
+              value: "0.0.0.0:4318"
           volumeMounts:
             - name: pointerdir
               mountPath: /opt/datadog-agent/run
@@ -176,8 +184,15 @@ spec:
   selector:
     app: datadog-agent
   ports:
-    - port: 8126
+    - name: traceport
+      port: 8126
       targetPort: traceport
+    - port: 4317
+      targetPort: otlp-grpc
+      name: otlp-grpc
+    - port: 4318
+      targetPort: otlp-http
+      name: otlp-http
 ---
 apiVersion: apps/v1
 kind: Deployment
