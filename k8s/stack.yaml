@@ -1,6 +1,8 @@
-# aiden-demo stack: order-service + Datadog Agent (APM traces + container logs, US3).
+# Lean aiden-demo stack: app + one Datadog Agent (APM + logs for this namespace, US3).
+# The agent is a single Deployment (not DaemonSet). It prefers the same node as aiden-demo
+# so hostPath log tailing works without running an agent on every cluster node.
 # Secret: DD_API_KEY=<key> ./scripts/apply-datadog-secret.sh
-# Upgrade from Deployment agent: kubectl -n aiden-demo delete deployment datadog-agent --ignore-not-found
+# After switching from DaemonSet: kubectl -n aiden-demo delete daemonset datadog-agent --ignore-not-found
 ---
 apiVersion: v1
 kind: Namespace
@@ -14,44 +16,77 @@ metadata:
   namespace: aiden-demo
 ---
 apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRole
+kind: Role
 metadata:
-  name: datadog-agent-aiden-demo
+  name: datadog-agent
+  namespace: aiden-demo
 rules:
   - apiGroups: [""]
-    resources: [services, events, endpoints, pods, nodes, componentstatuses]
+    resources: [pods, endpoints]
     verbs: [get, list, watch]
-  - apiGroups: [""]
-    resources: [configmaps]
-    resourceNames: [datadog-leader-election, datadog-custom-metrics]
-    verbs: [get, update]
-  - apiGroups: [""]
-    resources: [configmaps]
-    verbs: [create]
-  - nonResourceURLs: ["/metrics", "/metrics/slis"]
-    verbs: [get]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRoleBinding
+kind: RoleBinding
 metadata:
-  name: datadog-agent-aiden-demo
+  name: datadog-agent
+  namespace: aiden-demo
 roleRef:
   apiGroup: rbac.authorization.k8s.io
-  kind: ClusterRole
-  name: datadog-agent-aiden-demo
+  kind: Role
+  name: datadog-agent
 subjects:
   - kind: ServiceAccount
     name: datadog-agent
     namespace: aiden-demo
 ---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: datadog-agent-logs
+  namespace: aiden-demo
+data:
+  conf.yaml: |
+    logs:
+      - type: file
+        path: /var/log/pods/**/aiden-demo/*.log
+        service: order-service
+        source: go
+        tags:
+          - env:demo
+      - type: file
+        path: /var/log/pods/**/payment-service/*.log
+        service: payment-service
+        source: nodejs
+        tags:
+          - env:demo
+      - type: file
+        path: /var/log/pods/**/product-catalog-service/*.log
+        service: product-catalog-service
+        source: go
+        tags:
+          - env:demo
+      - type: file
+        path: /var/log/pods/**/ad-service/*.log
+        service: ad-service
+        source: java
+        tags:
+          - env:demo
+      - type: file
+        path: /var/log/pods/**/aiden-chaos-monkey/*.log
+        service: aiden-chaos-monkey
+        source: go
+        tags:
+          - env:demo
+---
 apiVersion: apps/v1
-kind: DaemonSet
+kind: Deployment
 metadata:
   name: datadog-agent
   namespace: aiden-demo
   labels:
     app: datadog-agent
 spec:
+  replicas: 1
   selector:
     matchLabels:
       app: datadog-agent
@@ -61,13 +96,19 @@ spec:
         app: datadog-agent
     spec:
       serviceAccountName: datadog-agent
+      affinity:
+        podAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchLabels:
+                  app: aiden-demo
+              topologyKey: kubernetes.io/hostname
       containers:
         - name: agent
           image: gcr.io/datadoghq/agent:7
           ports:
             - name: traceport
               containerPort: 8126
-              hostPort: 8126
           env:
             - name: DD_API_KEY
               valueFrom:
@@ -80,13 +121,17 @@ spec:
               valueFrom:
                 fieldRef:
                   fieldPath: spec.nodeName
+            - name: DD_KUBERNETES_KUBELET_NODENAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+            - name: DD_KUBELET_TLS_VERIFY
+              value: "false"
             - name: DD_APM_ENABLED
               value: "true"
             - name: DD_APM_NON_LOCAL_TRAFFIC
               value: "true"
             - name: DD_LOGS_ENABLED
-              value: "true"
-            - name: DD_LOGS_CONFIG_CONTAINER_COLLECT_ALL
               value: "true"
             - name: DD_ENABLE_PAYLOADS_SERIES
               value: "false"
@@ -102,8 +147,8 @@ spec:
             - name: logpodpath
               mountPath: /var/log/pods
               readOnly: true
-            - name: dockercontainers
-              mountPath: /var/lib/docker/containers
+            - name: logs-config
+              mountPath: /etc/datadog-agent/conf.d/demo_logs.d
               readOnly: true
           resources:
             requests:
@@ -118,9 +163,9 @@ spec:
         - name: logpodpath
           hostPath:
             path: /var/log/pods
-        - name: dockercontainers
-          hostPath:
-            path: /var/lib/docker/containers
+        - name: logs-config
+          configMap:
+            name: datadog-agent-logs
 ---
 apiVersion: v1
 kind: Service
@@ -176,11 +221,19 @@ spec:
             - name: DD_LOGS_INJECTION
               value: "true"
             - name: DD_AGENT_HOST
-              valueFrom:
-                fieldRef:
-                  fieldPath: status.hostIP
+              value: datadog-agent
             - name: DD_TRACE_AGENT_PORT
               value: "8126"
+            - name: DD_TRACE_PROPAGATION_STYLE
+              value: "datadog,tracecontext"
+            - name: PAYMENT_GRPC_ADDR
+              value: "payment-service:50051"
+            - name: CATALOG_GRPC_ADDR
+              value: "product-catalog-service:3550"
+            - name: AD_GRPC_ADDR
+              value: "ad-service:8080"
+            - name: DEFAULT_PRODUCT_ID
+              value: "66VCHSJNUP"
           readinessProbe:
             httpGet:
               path: /health

@@ -1,0 +1,52 @@
+# Random fault injection for aiden-demo — replaces fixed-order CronJob.
+# Pause: kubectl -n aiden-demo scale deployment/aiden-chaos-monkey --replicas=0
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: aiden-chaos-monkey
+  namespace: aiden-demo
+  labels:
+    app: aiden-chaos-monkey
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: aiden-chaos-monkey
+  template:
+    metadata:
+      labels:
+        app: aiden-chaos-monkey
+      annotations:
+        ad.datadoghq.com/aiden-chaos-monkey.logs: '[{"source":"go","service":"aiden-chaos-monkey","tags":["env:demo"]}]'
+    spec:
+      affinity:
+        podAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchLabels:
+                  app: aiden-demo
+              topologyKey: kubernetes.io/hostname
+      containers:
+        - name: aiden-chaos-monkey
+          image: ghcr.io/stackgen-demo/order-service-chaos-monkey:latest
+          imagePullPolicy: Always
+          env:
+            - name: DD_SERVICE
+              value: aiden-chaos-monkey
+            - name: DD_ENV
+              value: demo
+            - name: CHAOS_ENABLED
+              value: "true"
+            - name: CHAOS_MIN_INTERVAL_SEC
+              value: "45"
+            - name: CHAOS_MAX_INTERVAL_SEC
+              value: "480"
+            - name: ORDER_SERVICE_URL
+              value: "http://aiden-demo"
+            - name: PAYMENT_GRPC_ADDR
+              value: "payment-service:50051"
+            - name: CATALOG_GRPC_ADDR
+              value: "product-catalog-service:3550"
+            - name: AD_GRPC_ADDR
+              value: "ad-service:8080"

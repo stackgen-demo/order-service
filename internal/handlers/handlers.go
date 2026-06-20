@@ -10,6 +10,7 @@ import (
 	"runtime/debug"
 	"time"
 
+	"github.com/appcd-dev/order-service/internal/checkout"
 	"github.com/appcd-dev/order-service/internal/fault"
 	"github.com/appcd-dev/order-service/internal/logger"
 )
@@ -132,14 +133,14 @@ func (r *statusRecorder) WriteHeader(status int) {
 	r.ResponseWriter.WriteHeader(status)
 }
 
-func NewRouter(database *sql.DB) http.Handler {
+func NewRouter(database *sql.DB, orchestrator *checkout.Orchestrator) http.Handler {
 	mux := http.NewServeMux()
 	mux.Handle("GET /health", withLogging(HealthHandler{}))
 	mux.Handle("GET /api", withLogging(APIInfoHandler{}))
 	mux.Handle("GET /api/users", withLogging(UsersListHandler{DB: database}))
 	mux.Handle("POST /api/users", withLogging(UsersCreateHandler{DB: database}))
 	mux.Handle("GET /api/orders", withLogging(OrdersListHandler{DB: database}))
-	mux.Handle("POST /api/orders", withRecovery(withLogging(OrdersCreateHandler{DB: database})))
+	mux.Handle("POST /api/orders", withRecovery(withLogging(OrdersCreateHandler{DB: database, Checkout: orchestrator})))
 	mux.Handle("/", withLogging(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
 	})))

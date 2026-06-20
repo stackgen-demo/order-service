@@ -4,9 +4,12 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"context"
 
 	httptrace "github.com/DataDog/dd-trace-go/contrib/net/http/v2"
 	"github.com/DataDog/dd-trace-go/v2/ddtrace/tracer"
+	"github.com/appcd-dev/order-service/internal/checkout"
+	"github.com/appcd-dev/order-service/internal/clients"
 	"github.com/appcd-dev/order-service/internal/db"
 	"github.com/appcd-dev/order-service/internal/handlers"
 	"github.com/appcd-dev/order-service/internal/logger"
@@ -28,7 +31,16 @@ func main() {
 	}
 	defer database.Close()
 
-	handler := httptrace.WrapHandler(handlers.NewRouter(database), service, "")
+	downstream, err := clients.Dial(context.Background(), clients.ConfigFromEnv())
+	if err != nil {
+		logger.Error("failed to dial downstream services", map[string]any{"error": err.Error()})
+		os.Exit(1)
+	}
+	defer downstream.Close()
+
+	orchestrator := &checkout.Orchestrator{Downstream: downstream}
+
+	handler := httptrace.WrapHandler(handlers.NewRouter(database, orchestrator), service, "")
 
 	port := envOrDefault("PORT", "3000")
 	addr := fmt.Sprintf(":%s", port)
