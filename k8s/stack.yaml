@@ -67,6 +67,7 @@ spec:
           ports:
             - name: traceport
               containerPort: 8126
+              hostPort: 8126
           env:
             - name: DD_API_KEY
               valueFrom:
