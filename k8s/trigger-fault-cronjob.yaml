@@ -21,9 +21,9 @@ spec:
           containers:
             - name: curl
               image: curlimages/curl:8.5.0
-              env:
-                - name: DEMO_FAULT
-                  value: schema
+              envFrom:
+                - configMapRef:
+                    name: aiden-demo-fault-profile
               command:
                 - sh
                 - -c

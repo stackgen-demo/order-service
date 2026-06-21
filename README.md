@@ -155,6 +155,13 @@ On `POST /api/orders` failure:
 
 ### Example monitors
 
+Apply the full aiden-demo monitor set (all four checkout services + chaos-monkey;
+alerts go to `@webhook-sabith-datadog-testbed`):
+
+```bash
+DD_API_KEY=<us3-api-key> DD_APP_KEY=<us3-app-key> ./scripts/apply-datadog-monitors.sh
+```
+
 **5xx rate (APM):**
 
 ```text
@@ -164,7 +171,7 @@ sum:trace.http.request.hits{service:order-service,http.status_code:50*}.as_count
 **Root cause (logs):**
 
 ```text
-service:order-service @error.kind:DatabaseSchemaMismatch
+service:order-service env:demo DatabaseSchemaMismatch
 ```
 
 ## Agent fix guide (for automated PRs)
@@ -251,16 +258,39 @@ Datadog Agent Deployment for APM traces and container log collection):
 | File | What it creates |
 |------|-----------------|
 | `k8s/stack.yaml` | Namespace, 1× Datadog Agent Deployment (APM + logs), `aiden-demo` Deployment + Services |
+| `k8s/network-policy.yaml` | Namespace isolation — no cross-namespace or control-plane egress; Datadog agent US3 only |
+| `k8s/fault-profiles/*.yaml` | Shared `aiden-demo-fault-profile` ConfigMap presets (`quiet` / `normal` / `noisy`) |
+| `k8s/chaos-monkey.yaml` | Random checkout + leaf fault injection (reads fault profile) |
 | `k8s/datadog-secret.yaml` | Placeholder `datadog-secret` |
-| `k8s/trigger-fault-cronjob.yaml` | CronJob sends `X-Demo-Fault` (env `DEMO_FAULT` on curl container only) |
+| `k8s/trigger-fault-cronjob.yaml` | CronJob sends `X-Demo-Fault` (reads `DEMO_FAULT` from fault profile) |
 
 ```bash
-kubectl apply -f k8s/stack.yaml
-DD_API_KEY=<us3-key> ./scripts/apply-datadog-secret.sh
-kubectl apply -f k8s/trigger-fault-cronjob.yaml
-# after code changes:
-./scripts/deploy-aiden-demo.sh
+./scripts/deploy-aiden-demo-stack.sh   # applies normal fault level by default
+./scripts/set-fault-level.sh quiet     # reduce noise between demos
+./scripts/set-fault-level.sh noisy     # soak / monitor firing
 ```
+
+### Network isolation
+
+`k8s/network-policy.yaml` restricts **aiden-demo** so pods can only:
+
+- talk to other pods in **aiden-demo** (checkout mesh + Datadog agent)
+- resolve DNS via **kube-system** (UDP/TCP 53 only)
+
+Blocked for app pods: other namespaces, the Kubernetes API, EC2 metadata
+(`169.254.169.254`), and private RFC1918 ranges. The **datadog-agent** may
+additionally egress to public **HTTPS (443)** for US3 intake.
+
+On EKS, NetworkPolicy enforcement requires the VPC CNI addon with
+`enableNetworkPolicy: "true"` (once per cluster):
+
+```bash
+aws eks update-addon --cluster-name <cluster> --addon-name vpc-cni \
+  --resolve-conflicts PRESERVE \
+  --configuration-values '{"enableNetworkPolicy":"true"}'
+```
+
+After deploy:
 
 ```bash
 kubectl -n aiden-demo rollout status deployment/aiden-demo

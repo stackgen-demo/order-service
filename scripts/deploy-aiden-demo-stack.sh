@@ -14,6 +14,12 @@ echo "==> apply order-service stack (namespace, agent, order-service, log paths)
 kubectl apply -f "$ORDER_REPO/k8s/stack.yaml"
 kubectl -n "$NAMESPACE" delete daemonset datadog-agent --ignore-not-found
 
+echo "==> apply network policies (namespace isolation)"
+kubectl apply -f "$ORDER_REPO/k8s/network-policy.yaml"
+
+echo "==> apply shared fault profile (normal noise level)"
+kubectl apply -f "$ORDER_REPO/k8s/fault-profiles/normal.yaml"
+
 echo "==> apply satellite services"
 kubectl apply -f "$PAYMENT_REPO/k8s/payment-service.yaml"
 kubectl apply -f "$CATALOG_REPO/k8s/product-catalog-service.yaml"

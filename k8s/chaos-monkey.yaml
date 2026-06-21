@@ -36,12 +36,6 @@ spec:
               value: aiden-chaos-monkey
             - name: DD_ENV
               value: demo
-            - name: CHAOS_ENABLED
-              value: "true"
-            - name: CHAOS_MIN_INTERVAL_SEC
-              value: "45"
-            - name: CHAOS_MAX_INTERVAL_SEC
-              value: "480"
             - name: ORDER_SERVICE_URL
               value: "http://aiden-demo"
             - name: PAYMENT_GRPC_ADDR
@@ -50,3 +44,6 @@ spec:
               value: "product-catalog-service:3550"
             - name: AD_GRPC_ADDR
               value: "ad-service:8080"
+          envFrom:
+            - configMapRef:
+                name: aiden-demo-fault-profile

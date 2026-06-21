@@ -1,4 +1,6 @@
 # Lean aiden-demo stack: app + one Datadog Agent (APM + logs for this namespace, US3).
+# Network isolation: kubectl apply -f k8s/network-policy.yaml (included in deploy-aiden-demo-stack.sh).
+# Requires EKS VPC CNI with enableNetworkPolicy=true on the cluster.
 # The agent is a single Deployment (not DaemonSet). It prefers the same node as aiden-demo
 # so hostPath log tailing works without running an agent on every cluster node.
 # Secret: DD_API_KEY=<key> ./scripts/apply-datadog-secret.sh
@@ -144,6 +146,14 @@ spec:
             - name: DD_ENABLE_PAYLOADS_SERVICE_CHECKS
               value: "false"
             - name: DD_COLLECT_KUBERNETES_EVENTS
+              value: "false"
+            # Lean agent: file logs + APM only — no kubelet / orchestrator / API calls
+            # (required when NetworkPolicy blocks control-plane and cross-namespace egress).
+            - name: DD_KUBELET_CORE_CHECK
+              value: "false"
+            - name: DD_ORCHESTRATOR_EXPLORER_ENABLED
+              value: "false"
+            - name: DD_PROCESS_AGENT_ENABLED
               value: "false"
             - name: DD_OTLP_CONFIG_RECEIVER_PROTOCOLS_GRPC_ENDPOINT
               value: "0.0.0.0:4317"

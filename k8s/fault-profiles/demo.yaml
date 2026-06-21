@@ -1,0 +1,27 @@
+# Demo-speed fault noise for live demos — fast chaos intervals so the
+# audience sees faults trigger within seconds, not minutes.
+# Switch to this profile: kubectl apply -f fault-profiles/demo.yaml
+# Revert after demo:      kubectl apply -f fault-profiles/normal.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: aiden-demo-fault-profile
+  namespace: aiden-demo
+  labels:
+    app.kubernetes.io/part-of: aiden-demo-stack
+data:
+  AIDEN_DEMO_FAULT_LEVEL: "demo"
+
+  CHAOS_ENABLED: "true"
+  CHAOS_MIN_INTERVAL_SEC: "10"
+  CHAOS_MAX_INTERVAL_SEC: "30"
+  CHAOS_BURST_SIZE: "3"
+
+  PAYMENT_DEMO_FAULT: ""
+  PAYMENT_FAILURE_FRACTION: "0.35"
+  CATALOG_DEMO_FAULT: ""
+  CATALOG_FAILURE_FRACTION: "0.05"
+  AD_DEMO_FAULT: ""
+  AD_FAILURE_FRACTION: "0.08"
+
+  DEMO_FAULT: "schema"

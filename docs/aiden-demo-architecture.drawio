@@ -1,0 +1,294 @@
+<mxfile host="app.diagrams.net" modified="2026-06-21T07:55:00.000Z" agent="Antigravity" version="24.0.0" type="device">
+  <diagram name="aiden-demo Architecture" id="aiden-demo-arch">
+    <mxGraphModel dx="1800" dy="1100" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1600" pageHeight="1200" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+
+        <!-- ===== KUBERNETES CLUSTER BOUNDARY ===== -->
+        <mxCell id="cluster" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;fontColor=#333333;dashed=1;dashPattern=8 4;arcSize=6;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="40" y="40" width="1320" height="920" as="geometry" />
+        </mxCell>
+        <mxCell id="cluster_label" value="&lt;b&gt;Kubernetes Cluster&lt;/b&gt;" style="text;html=1;align=left;verticalAlign=top;fontSize=13;fontColor=#666666;" vertex="1" parent="1">
+          <mxGeometry x="55" y="48" width="200" height="26" as="geometry" />
+        </mxCell>
+
+        <!-- ===== AIDEN-DEMO NAMESPACE ===== -->
+        <mxCell id="ns" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E8EAF6;strokeColor=#3F51B5;dashed=1;dashPattern=5 3;arcSize=6;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="70" y="80" width="1260" height="860" as="geometry" />
+        </mxCell>
+        <mxCell id="ns_label" value="&lt;b&gt;namespace: aiden-demo&lt;/b&gt;" style="text;html=1;align=left;verticalAlign=top;fontSize=14;fontColor=#3F51B5;" vertex="1" parent="1">
+          <mxGeometry x="90" y="88" width="240" height="26" as="geometry" />
+        </mxCell>
+
+        <!-- ===== ORDER-SERVICE (BFF / Orchestrator) ===== -->
+        <mxCell id="order" value="&lt;b style=&quot;font-size:14px;&quot;&gt;order-service&lt;/b&gt;&lt;br&gt;&lt;span style=&quot;font-size:11px;color:#555;&quot;&gt;Go · HTTP :3000&lt;br&gt;dd-trace-go (HTTP + gRPC client)&lt;br&gt;&lt;br&gt;&lt;i&gt;Checkout Orchestrator&lt;/i&gt;&lt;br&gt;catalog → ad → payment → SQLite&lt;br&gt;&lt;br&gt;&lt;b&gt;Fault modes (X-Demo-Fault):&lt;/b&gt;&lt;br&gt;healthy │ schema │ dependency&lt;br&gt;timeout │ locked │ panic&lt;/span&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DCEDC8;strokeColor=#689F38;strokeWidth=2;verticalAlign=top;spacingTop=8;spacingLeft=8;spacingRight=8;align=left;shadow=1;" vertex="1" parent="1">
+          <mxGeometry x="440" y="140" width="310" height="200" as="geometry" />
+        </mxCell>
+
+        <!-- ===== PAYMENT-SERVICE ===== -->
+        <mxCell id="payment" value="&lt;b style=&quot;font-size:13px;&quot;&gt;payment-service&lt;/b&gt;&lt;br&gt;&lt;span style=&quot;font-size:11px;color:#555;&quot;&gt;Node.js · gRPC :50051&lt;br&gt;dd-trace (gRPC server)&lt;br&gt;&lt;br&gt;&lt;b&gt;Env faults:&lt;/b&gt;&lt;br&gt;PAYMENT_FAILURE_FRACTION&lt;br&gt;PAYMENT_DEMO_FAULT&lt;br&gt;(invalid_card / expired_card / slow)&lt;br&gt;&lt;br&gt;&lt;b&gt;error.kind:&lt;/b&gt; PaymentFailure&lt;br&gt;InvalidCard · ExpiredCard&lt;/span&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF3E0;strokeColor=#E65100;strokeWidth=2;verticalAlign=top;spacingTop=8;spacingLeft=8;spacingRight=8;align=left;shadow=1;" vertex="1" parent="1">
+          <mxGeometry x="860" y="140" width="250" height="210" as="geometry" />
+        </mxCell>
+
+        <!-- ===== PRODUCT-CATALOG-SERVICE ===== -->
+        <mxCell id="catalog" value="&lt;b style=&quot;font-size:13px;&quot;&gt;product-catalog-service&lt;/b&gt;&lt;br&gt;&lt;span style=&quot;font-size:11px;color:#555;&quot;&gt;Go · gRPC :3550&lt;br&gt;dd-trace-go (gRPC server) + OTEL&lt;br&gt;&lt;br&gt;&lt;b&gt;Env faults:&lt;/b&gt;&lt;br&gt;CATALOG_DEMO_FAULT&lt;br&gt;(feature / rank)&lt;br&gt;CATALOG_FAILURE_FRACTION&lt;br&gt;&lt;br&gt;&lt;b&gt;error.kind:&lt;/b&gt;&lt;br&gt;CatalogFeatureFailure&lt;br&gt;CatalogRankIndexPanic&lt;/span&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E3F2FD;strokeColor=#1565C0;strokeWidth=2;verticalAlign=top;spacingTop=8;spacingLeft=8;spacingRight=8;align=left;shadow=1;" vertex="1" parent="1">
+          <mxGeometry x="120" y="420" width="250" height="220" as="geometry" />
+        </mxCell>
+
+        <!-- ===== AD-SERVICE ===== -->
+        <mxCell id="ad" value="&lt;b style=&quot;font-size:13px;&quot;&gt;ad-service&lt;/b&gt;&lt;br&gt;&lt;span style=&quot;font-size:11px;color:#555;&quot;&gt;Java · gRPC :8080&lt;br&gt;OTEL Java agent → DD OTLP&lt;br&gt;log4j2 JsonLayout (stdout)&lt;br&gt;&lt;br&gt;&lt;b&gt;Env faults:&lt;/b&gt;&lt;br&gt;AD_DEMO_FAULT&lt;br&gt;(unavailable / high_cpu / manual_gc)&lt;br&gt;AD_FAILURE_FRACTION&lt;br&gt;&lt;br&gt;&lt;b&gt;error.kind:&lt;/b&gt;&lt;br&gt;AdServiceUnavailable&lt;/span&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FCE4EC;strokeColor=#C62828;strokeWidth=2;verticalAlign=top;spacingTop=8;spacingLeft=8;spacingRight=8;align=left;shadow=1;" vertex="1" parent="1">
+          <mxGeometry x="440" y="420" width="260" height="220" as="geometry" />
+        </mxCell>
+
+        <!-- ===== CHAOS MONKEY ===== -->
+        <mxCell id="monkey" value="&lt;b style=&quot;font-size:14px;&quot;&gt;🐒 aiden-chaos-monkey&lt;/b&gt;&lt;br&gt;&lt;span style=&quot;font-size:11px;color:#555;&quot;&gt;Go Deployment (always-on)&lt;br&gt;&lt;br&gt;Random sleep [45s – 8min]&lt;br&gt;&lt;b&gt;60%&lt;/b&gt; checkout_saga (POST /api/orders)&lt;br&gt;&lt;b&gt;40%&lt;/b&gt; isolated leaf gRPC fault&lt;br&gt;&lt;br&gt;Burst: 1 (occasionally 3-5)&lt;br&gt;Kill switch: CHAOS_ENABLED=false&lt;br&gt;Pause: scale replicas=0&lt;/span&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF9C4;strokeColor=#F9A825;strokeWidth=2;verticalAlign=top;spacingTop=8;spacingLeft=8;spacingRight=8;align=left;shadow=1;" vertex="1" parent="1">
+          <mxGeometry x="120" y="140" width="260" height="200" as="geometry" />
+        </mxCell>
+
+        <!-- ===== DATADOG AGENT ===== -->
+        <mxCell id="agent" value="&lt;b style=&quot;font-size:14px;&quot;&gt;datadog-agent&lt;/b&gt;&lt;br&gt;&lt;span style=&quot;font-size:11px;color:#555;&quot;&gt;Deployment (single replica)&lt;br&gt;APM :8126 · OTLP :4317/:4318&lt;br&gt;&lt;br&gt;&lt;b&gt;File tail paths (ConfigMap):&lt;/b&gt;&lt;br&gt;/var/log/pods/**/aiden-demo/*.log&lt;br&gt;/var/log/pods/**/payment-service/*.log&lt;br&gt;/var/log/pods/**/product-catalog-service/*.log&lt;br&gt;/var/log/pods/**/ad-service/*.log&lt;br&gt;/var/log/pods/**/aiden-chaos-monkey/*.log&lt;br&gt;&lt;br&gt;Affinity: same node as aiden-demo&lt;/span&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E8D5F5;strokeColor=#7B1FA2;strokeWidth=2;verticalAlign=top;spacingTop=8;spacingLeft=8;spacingRight=8;align=left;shadow=1;" vertex="1" parent="1">
+          <mxGeometry x="770" y="420" width="310" height="230" as="geometry" />
+        </mxCell>
+
+        <!-- ===== DATADOG US3 (EXTERNAL) ===== -->
+        <mxCell id="dd_cloud" value="&lt;b style=&quot;font-size:15px;&quot;&gt;☁️ Datadog US3&lt;/b&gt;&lt;br&gt;&lt;span style=&quot;font-size:11px;color:#555;&quot;&gt;us3.datadoghq.com&lt;br&gt;&lt;br&gt;APM Service Map&lt;br&gt;Log Explorer&lt;br&gt;Trace / Flame Graph&lt;br&gt;Monitors &amp; Alerts&lt;/span&gt;" style="shape=cloud;whiteSpace=wrap;html=1;fillColor=#632CA6;fontColor=#FFFFFF;strokeColor=#4A148C;strokeWidth=2;shadow=1;verticalAlign=middle;spacingTop=0;" vertex="1" parent="1">
+          <mxGeometry x="1160" y="720" width="260" height="170" as="geometry" />
+        </mxCell>
+
+        <!-- ===== FAULT PROFILE CONFIGMAP ===== -->
+        <mxCell id="fault_cm" value="&lt;b&gt;ConfigMap&lt;br&gt;aiden-demo-fault-profile&lt;/b&gt;&lt;br&gt;&lt;span style=&quot;font-size:10px;color:#555;&quot;&gt;normal / noisy / quiet&lt;br&gt;DEMO_FAULT, *_FAILURE_FRACTION&lt;br&gt;*_DEMO_FAULT env vars&lt;/span&gt;" style="shape=note;whiteSpace=wrap;html=1;backgroundOutline=1;fillColor=#FFF8E1;strokeColor=#FFB300;size=14;strokeWidth=1;fontSize=11;shadow=1;" vertex="1" parent="1">
+          <mxGeometry x="120" y="710" width="220" height="110" as="geometry" />
+        </mxCell>
+
+        <!-- ===== CronJob (deprecated) ===== -->
+        <mxCell id="cronjob" value="&lt;b&gt;CronJob (SUSPENDED)&lt;/b&gt;&lt;br&gt;&lt;span style=&quot;font-size:10px;color:#999;&quot;&gt;order-service-trigger-fault&lt;br&gt;suspend: true&lt;br&gt;Replaced by chaos monkey&lt;/span&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F5F5F5;strokeColor=#BDBDBD;strokeWidth=1;dashed=1;fontColor=#999999;fontSize=11;shadow=0;" vertex="1" parent="1">
+          <mxGeometry x="120" y="850" width="220" height="70" as="geometry" />
+        </mxCell>
+
+        <!-- ===== SQLite DB ===== -->
+        <mxCell id="sqlite" value="&lt;b&gt;SQLite&lt;/b&gt;&lt;br&gt;&lt;span style=&quot;font-size:10px;&quot;&gt;/app/data/app.db&lt;/span&gt;" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;size=8;fillColor=#DCEDC8;strokeColor=#689F38;strokeWidth=1;shadow=1;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="640" y="385" width="90" height="60" as="geometry" />
+        </mxCell>
+
+        <!-- ============================================ -->
+        <!--               CONNECTIONS                     -->
+        <!-- ============================================ -->
+
+        <!-- CHAOS MONKEY → ORDER-SERVICE (HTTP POST /api/orders) -->
+        <mxCell id="e_monkey_order" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;strokeColor=#F9A825;strokeWidth=2;exitX=1;exitY=0.3;exitDx=0;exitDy=0;entryX=0;entryY=0.3;entryDx=0;entryDy=0;curved=1;" edge="1" source="monkey" target="order" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_monkey_order_label" value="&lt;span style=&quot;font-size:10px;background:#FFF9C4;padding:2px 4px;border-radius:3px;&quot;&gt;HTTP POST /api/orders&lt;br&gt;X-Demo-Fault header&lt;br&gt;&lt;b&gt;60% checkout_saga&lt;/b&gt;&lt;/span&gt;" style="edgeLabel;html=1;align=center;verticalAlign=middle;" vertex="1" connectable="0" parent="e_monkey_order">
+          <mxGeometry x="-0.1" relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- CHAOS MONKEY → PAYMENT (isolated gRPC) -->
+        <mxCell id="e_monkey_payment" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;strokeColor=#F9A825;strokeWidth=1;dashed=1;dashPattern=5 3;exitX=1;exitY=0.7;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;curved=1;" edge="1" source="monkey" target="payment" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="400" y="280" />
+              <mxPoint x="985" y="280" />
+              <mxPoint x="985" y="130" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_monkey_payment_label" value="&lt;span style=&quot;font-size:9px;color:#F9A825;&quot;&gt;isolated gRPC Charge&lt;/span&gt;" style="edgeLabel;html=1;align=center;verticalAlign=middle;" vertex="1" connectable="0" parent="e_monkey_payment">
+          <mxGeometry x="0.3" relative="1" as="geometry">
+            <mxPoint x="0" y="-10" as="offset" />
+          </mxGeometry>
+        </mxCell>
+
+        <!-- CHAOS MONKEY → CATALOG (isolated gRPC) -->
+        <mxCell id="e_monkey_catalog" style="rounded=1;orthogonalLoop=1;strokeColor=#F9A825;strokeWidth=1;dashed=1;dashPattern=5 3;exitX=0.3;exitY=1;exitDx=0;exitDy=0;entryX=0.3;entryY=0;entryDx=0;entryDy=0;curved=1;" edge="1" source="monkey" target="catalog" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_monkey_catalog_label" value="&lt;span style=&quot;font-size:9px;color:#F9A825;&quot;&gt;isolated gRPC&lt;br&gt;GetProduct&lt;/span&gt;" style="edgeLabel;html=1;align=center;verticalAlign=middle;" vertex="1" connectable="0" parent="e_monkey_catalog">
+          <mxGeometry x="-0.1" relative="1" as="geometry">
+            <mxPoint x="-25" as="offset" />
+          </mxGeometry>
+        </mxCell>
+
+        <!-- CHAOS MONKEY → AD (isolated gRPC) -->
+        <mxCell id="e_monkey_ad" style="rounded=1;orthogonalLoop=1;strokeColor=#F9A825;strokeWidth=1;dashed=1;dashPattern=5 3;exitX=0.7;exitY=1;exitDx=0;exitDy=0;entryX=0.3;entryY=0;entryDx=0;entryDy=0;curved=1;" edge="1" source="monkey" target="ad" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_monkey_ad_label" value="&lt;span style=&quot;font-size:9px;color:#F9A825;&quot;&gt;isolated gRPC&lt;br&gt;GetAds&lt;/span&gt;" style="edgeLabel;html=1;align=center;verticalAlign=middle;" vertex="1" connectable="0" parent="e_monkey_ad">
+          <mxGeometry x="-0.1" relative="1" as="geometry">
+            <mxPoint x="15" as="offset" />
+          </mxGeometry>
+        </mxCell>
+
+        <!-- ORDER → CATALOG (gRPC GetProduct) -->
+        <mxCell id="e_order_catalog" style="rounded=1;orthogonalLoop=1;strokeColor=#1565C0;strokeWidth=2;exitX=0;exitY=0.8;exitDx=0;exitDy=0;entryX=1;entryY=0.2;entryDx=0;entryDy=0;curved=1;" edge="1" source="order" target="catalog" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_order_catalog_label" value="&lt;span style=&quot;font-size:11px;background:#E3F2FD;padding:2px 5px;border-radius:3px;&quot;&gt;① gRPC &lt;b&gt;GetProduct&lt;/b&gt; :3550&lt;/span&gt;" style="edgeLabel;html=1;align=center;verticalAlign=middle;" vertex="1" connectable="0" parent="e_order_catalog">
+          <mxGeometry x="-0.2" relative="1" as="geometry">
+            <mxPoint x="-10" y="-15" as="offset" />
+          </mxGeometry>
+        </mxCell>
+
+        <!-- ORDER → AD (gRPC GetAds) -->
+        <mxCell id="e_order_ad" style="rounded=1;orthogonalLoop=1;strokeColor=#C62828;strokeWidth=2;exitX=0.3;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;curved=1;" edge="1" source="order" target="ad" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_order_ad_label" value="&lt;span style=&quot;font-size:11px;background:#FCE4EC;padding:2px 5px;border-radius:3px;&quot;&gt;② gRPC &lt;b&gt;GetAds&lt;/b&gt; :8080&lt;/span&gt;" style="edgeLabel;html=1;align=center;verticalAlign=middle;" vertex="1" connectable="0" parent="e_order_ad">
+          <mxGeometry x="-0.2" relative="1" as="geometry">
+            <mxPoint x="-20" as="offset" />
+          </mxGeometry>
+        </mxCell>
+
+        <!-- ORDER → PAYMENT (gRPC Charge) -->
+        <mxCell id="e_order_payment" style="rounded=1;orthogonalLoop=1;strokeColor=#E65100;strokeWidth=2;exitX=1;exitY=0.4;exitDx=0;exitDy=0;entryX=0;entryY=0.4;entryDx=0;entryDy=0;curved=1;" edge="1" source="order" target="payment" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_order_payment_label" value="&lt;span style=&quot;font-size:11px;background:#FFF3E0;padding:2px 5px;border-radius:3px;&quot;&gt;③ gRPC &lt;b&gt;Charge&lt;/b&gt; :50051&lt;/span&gt;" style="edgeLabel;html=1;align=center;verticalAlign=middle;" vertex="1" connectable="0" parent="e_order_payment">
+          <mxGeometry x="-0.1" relative="1" as="geometry">
+            <mxPoint y="-12" as="offset" />
+          </mxGeometry>
+        </mxCell>
+
+        <!-- ORDER → SQLITE -->
+        <mxCell id="e_order_db" style="rounded=1;orthogonalLoop=1;strokeColor=#689F38;strokeWidth=1;exitX=0.7;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;curved=1;" edge="1" source="order" target="sqlite" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_order_db_label" value="&lt;span style=&quot;font-size:10px;&quot;&gt;④ INSERT order&lt;/span&gt;" style="edgeLabel;html=1;align=center;verticalAlign=middle;" vertex="1" connectable="0" parent="e_order_db">
+          <mxGeometry x="-0.2" relative="1" as="geometry">
+            <mxPoint x="15" as="offset" />
+          </mxGeometry>
+        </mxCell>
+
+        <!-- ALL SERVICES → DATADOG AGENT (APM traces) -->
+        <!-- order → agent -->
+        <mxCell id="e_order_agent" style="rounded=1;orthogonalLoop=1;strokeColor=#7B1FA2;strokeWidth=1;dashed=1;dashPattern=3 3;exitX=0.85;exitY=1;exitDx=0;exitDy=0;entryX=0.3;entryY=0;entryDx=0;entryDy=0;curved=1;" edge="1" source="order" target="agent" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_order_agent_label" value="&lt;span style=&quot;font-size:9px;color:#7B1FA2;&quot;&gt;dd-trace :8126&lt;/span&gt;" style="edgeLabel;html=1;align=center;verticalAlign=middle;" vertex="1" connectable="0" parent="e_order_agent">
+          <mxGeometry x="-0.3" relative="1" as="geometry">
+            <mxPoint x="20" as="offset" />
+          </mxGeometry>
+        </mxCell>
+
+        <!-- payment → agent -->
+        <mxCell id="e_payment_agent" style="rounded=1;orthogonalLoop=1;strokeColor=#7B1FA2;strokeWidth=1;dashed=1;dashPattern=3 3;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.7;entryY=0;entryDx=0;entryDy=0;curved=1;" edge="1" source="payment" target="agent" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_payment_agent_label" value="&lt;span style=&quot;font-size:9px;color:#7B1FA2;&quot;&gt;dd-trace :8126&lt;/span&gt;" style="edgeLabel;html=1;align=center;verticalAlign=middle;" vertex="1" connectable="0" parent="e_payment_agent">
+          <mxGeometry x="-0.3" relative="1" as="geometry">
+            <mxPoint x="15" as="offset" />
+          </mxGeometry>
+        </mxCell>
+
+        <!-- catalog → agent -->
+        <mxCell id="e_catalog_agent" style="rounded=1;orthogonalLoop=1;strokeColor=#7B1FA2;strokeWidth=1;dashed=1;dashPattern=3 3;exitX=1;exitY=0.8;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;curved=1;" edge="1" source="catalog" target="agent" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_catalog_agent_label" value="&lt;span style=&quot;font-size:9px;color:#7B1FA2;&quot;&gt;dd-trace :8126&lt;br&gt;+ OTLP :4317&lt;/span&gt;" style="edgeLabel;html=1;align=center;verticalAlign=middle;" vertex="1" connectable="0" parent="e_catalog_agent">
+          <mxGeometry x="-0.3" relative="1" as="geometry">
+            <mxPoint y="15" as="offset" />
+          </mxGeometry>
+        </mxCell>
+
+        <!-- ad → agent -->
+        <mxCell id="e_ad_agent" style="rounded=1;orthogonalLoop=1;strokeColor=#7B1FA2;strokeWidth=1;dashed=1;dashPattern=3 3;exitX=1;exitY=0.7;exitDx=0;exitDy=0;entryX=0;entryY=0.3;entryDx=0;entryDy=0;curved=1;" edge="1" source="ad" target="agent" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_ad_agent_label" value="&lt;span style=&quot;font-size:9px;color:#7B1FA2;&quot;&gt;OTLP :4318 (HTTP)&lt;/span&gt;" style="edgeLabel;html=1;align=center;verticalAlign=middle;" vertex="1" connectable="0" parent="e_ad_agent">
+          <mxGeometry x="-0.3" relative="1" as="geometry">
+            <mxPoint y="12" as="offset" />
+          </mxGeometry>
+        </mxCell>
+
+        <!-- DATADOG AGENT → DATADOG US3 -->
+        <mxCell id="e_agent_dd" style="rounded=1;orthogonalLoop=1;strokeColor=#632CA6;strokeWidth=3;exitX=0.8;exitY=1;exitDx=0;exitDy=0;entryX=0.3;entryY=0.3;entryDx=0;entryDy=0;curved=1;" edge="1" source="agent" target="dd_cloud" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_agent_dd_label" value="&lt;span style=&quot;font-size:11px;background:#E8D5F5;padding:2px 6px;border-radius:3px;&quot;&gt;&lt;b&gt;Traces + File-tail Logs&lt;/b&gt;&lt;/span&gt;" style="edgeLabel;html=1;align=center;verticalAlign=middle;" vertex="1" connectable="0" parent="e_agent_dd">
+          <mxGeometry x="-0.2" relative="1" as="geometry">
+            <mxPoint x="20" y="-10" as="offset" />
+          </mxGeometry>
+        </mxCell>
+
+        <!-- CONFIGMAP → all services (envFrom) -->
+        <mxCell id="e_cm_order" style="rounded=1;orthogonalLoop=1;strokeColor=#FFB300;strokeWidth=1;dashed=1;exitX=0.5;exitY=0;exitDx=0;exitDy=0;curved=1;startArrow=none;endArrow=open;endFill=0;" edge="1" source="fault_cm" target="order" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="230" y="680" />
+              <mxPoint x="550" y="680" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+        <mxCell id="e_cm_payment" style="rounded=1;orthogonalLoop=1;strokeColor=#FFB300;strokeWidth=1;dashed=1;exitX=1;exitY=0;exitDx=0;exitDy=0;curved=1;startArrow=none;endArrow=open;endFill=0;" edge="1" source="fault_cm" target="payment" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="340" y="690" />
+              <mxPoint x="985" y="690" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+        <mxCell id="e_cm_catalog" style="rounded=1;orthogonalLoop=1;strokeColor=#FFB300;strokeWidth=1;dashed=1;exitX=0;exitY=0;exitDx=0;exitDy=0;entryX=0.3;entryY=1;entryDx=0;entryDy=0;curved=1;startArrow=none;endArrow=open;endFill=0;" edge="1" source="fault_cm" target="catalog" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="e_cm_ad" style="rounded=1;orthogonalLoop=1;strokeColor=#FFB300;strokeWidth=1;dashed=1;exitX=0.5;exitY=0;exitDx=0;exitDy=0;entryX=0.3;entryY=1;entryDx=0;entryDy=0;curved=1;startArrow=none;endArrow=open;endFill=0;" edge="1" source="fault_cm" target="ad" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="230" y="670" />
+              <mxPoint x="518" y="670" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+        <mxCell id="e_cm_monkey" style="rounded=1;orthogonalLoop=1;strokeColor=#FFB300;strokeWidth=1;dashed=1;exitX=0;exitY=0.5;exitDx=0;exitDy=0;curved=1;startArrow=none;endArrow=open;endFill=0;" edge="1" source="fault_cm" target="monkey" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="90" y="765" />
+              <mxPoint x="90" y="300" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+        <mxCell id="e_cm_label" value="&lt;span style=&quot;font-size:9px;color:#FFB300;&quot;&gt;envFrom: aiden-demo-fault-profile&lt;/span&gt;" style="edgeLabel;html=1;align=center;verticalAlign=middle;" vertex="1" connectable="0" parent="e_cm_monkey">
+          <mxGeometry x="-0.5" relative="1" as="geometry">
+            <mxPoint x="-5" y="-10" as="offset" />
+          </mxGeometry>
+        </mxCell>
+
+        <!-- ===== JSON STDOUT LOGS (file tail arrows to agent) ===== -->
+        <mxCell id="log_note" value="&lt;span style=&quot;font-size:10px;&quot;&gt;All services emit &lt;b&gt;JSON stdout&lt;/b&gt; logs&lt;br&gt;with &lt;code&gt;dd.trace_id&lt;/code&gt; + &lt;code&gt;error.kind&lt;/code&gt;&lt;br&gt;File-tailed by agent via hostPath&lt;br&gt;&lt;code&gt;/var/log/pods/**/*.log&lt;/code&gt;&lt;/span&gt;" style="shape=note;whiteSpace=wrap;html=1;backgroundOutline=1;fillColor=#E8D5F5;strokeColor=#7B1FA2;size=12;strokeWidth=1;fontSize=10;shadow=1;" vertex="1" parent="1">
+          <mxGeometry x="770" y="680" width="230" height="90" as="geometry" />
+        </mxCell>
+
+        <!-- ===== TRACE PROPAGATION LEGEND ===== -->
+        <mxCell id="legend_box" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FAFAFA;strokeColor=#CCCCCC;strokeWidth=1;shadow=0;" vertex="1" parent="1">
+          <mxGeometry x="380" y="720" width="350" height="190" as="geometry" />
+        </mxCell>
+        <mxCell id="legend_title" value="&lt;b&gt;Legend&lt;/b&gt;" style="text;html=1;align=left;verticalAlign=top;fontSize=12;fontColor=#333;" vertex="1" parent="1">
+          <mxGeometry x="395" y="728" width="60" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="legend1" value="&lt;span style=&quot;font-size:10px;&quot;&gt;━━ Solid: gRPC checkout chain (① → ② → ③ → ④)&lt;/span&gt;" style="text;html=1;align=left;verticalAlign=middle;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="395" y="752" width="320" height="18" as="geometry" />
+        </mxCell>
+        <mxCell id="legend2" value="&lt;span style=&quot;font-size:10px;&quot;&gt;╌╌ Yellow dashed: Chaos monkey isolated faults&lt;/span&gt;" style="text;html=1;align=left;verticalAlign=middle;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="395" y="772" width="320" height="18" as="geometry" />
+        </mxCell>
+        <mxCell id="legend3" value="&lt;span style=&quot;font-size:10px;&quot;&gt;╌╌ Purple dashed: APM traces (dd-trace / OTLP)&lt;/span&gt;" style="text;html=1;align=left;verticalAlign=middle;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="395" y="792" width="320" height="18" as="geometry" />
+        </mxCell>
+        <mxCell id="legend4" value="&lt;span style=&quot;font-size:10px;&quot;&gt;╌╌ Gold dashed: ConfigMap envFrom injection&lt;/span&gt;" style="text;html=1;align=left;verticalAlign=middle;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="395" y="812" width="320" height="18" as="geometry" />
+        </mxCell>
+        <mxCell id="legend5" value="&lt;span style=&quot;font-size:10px;&quot;&gt;&lt;b&gt;Trace propagation:&lt;/b&gt; DD_TRACE_PROPAGATION_STYLE=&lt;br&gt;  datadog,tracecontext (all services)&lt;/span&gt;" style="text;html=1;align=left;verticalAlign=middle;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="395" y="838" width="320" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="legend6" value="&lt;span style=&quot;font-size:10px;&quot;&gt;&lt;b&gt;Healthy checkout trace shape:&lt;/b&gt;&lt;br&gt;  monkey → order → catalog → ad → payment → db&lt;br&gt;  (≥4 spans, shared trace_id in logs)&lt;/span&gt;" style="text;html=1;align=left;verticalAlign=middle;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="395" y="870" width="320" height="36" as="geometry" />
+        </mxCell>
+
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
