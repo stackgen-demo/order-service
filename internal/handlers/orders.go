@@ -7,6 +7,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/appcd-dev/order-service/internal/checkout"
+	"github.com/appcd-dev/order-service/internal/clients"
 	"github.com/appcd-dev/order-service/internal/fault"
 	"github.com/appcd-dev/order-service/internal/logger"
 )
@@ -44,13 +46,19 @@ func (h OrdersListHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 type OrdersCreateHandler struct {
-	DB *sql.DB
+	DB           *sql.DB
+	Checkout     *checkout.Orchestrator
 }
 
 type createOrderRequest struct {
-	CustomerEmail string  `json:"customer_email"`
-	TotalAmount   float64 `json:"total_amount"`
-	Status        string  `json:"status"`
+	CustomerEmail      string  `json:"customer_email"`
+	TotalAmount        float64 `json:"total_amount"`
+	Status             string  `json:"status"`
+	ProductID          string  `json:"product_id"`
+	CreditCardNumber   string  `json:"credit_card_number"`
+	CreditCardCVV      int32   `json:"credit_card_cvv"`
+	CreditCardExpYear  int32   `json:"credit_card_expiration_year"`
+	CreditCardExpMonth int32   `json:"credit_card_expiration_month"`
 }
 
 // ServeHTTP handles POST /api/orders.
@@ -102,6 +110,19 @@ func (h OrdersCreateHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func (h OrdersCreateHandler) checkoutRequest(req createOrderRequest, status string) checkout.Request {
+	return checkout.Request{
+		CustomerEmail:      req.CustomerEmail,
+		TotalAmount:        req.TotalAmount,
+		Status:             status,
+		ProductID:          req.ProductID,
+		CreditCardNumber:   req.CreditCardNumber,
+		CreditCardCVV:      req.CreditCardCVV,
+		CreditCardExpYear:  req.CreditCardExpYear,
+		CreditCardExpMonth: req.CreditCardExpMonth,
+	}
+}
+
 func (h OrdersCreateHandler) createSchemaMismatchOrder(w http.ResponseWriter, r *http.Request, req createOrderRequest, status string) {
 	_, err := h.DB.Exec(
 		`INSERT INTO orders (customer_email, total_amount, status) VALUES (?, ?, ?)`,
@@ -136,6 +157,27 @@ func (h OrdersCreateHandler) createSchemaMismatchOrder(w http.ResponseWriter, r 
 }
 
 func (h OrdersCreateHandler) createHealthyOrder(w http.ResponseWriter, r *http.Request, req createOrderRequest, status string) {
+	if h.Checkout == nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "checkout not configured"})
+		return
+	}
+
+	checkoutResult, err := h.Checkout.Run(r.Context(), h.checkoutRequest(req, status))
+	if err != nil {
+		logOrderFault(r, http.StatusBadGateway, "Order creation failed: checkout saga error", map[string]any{
+			"kind":       "CheckoutSagaFailure",
+			"message":    err.Error(),
+			"root_cause": "Downstream catalog, ad, or payment step failed during healthy checkout",
+		}, map[string]any{
+			"customer_email": req.CustomerEmail,
+			"total_amount":   req.TotalAmount,
+			"product_id":     req.ProductID,
+			"demo_fault":     fault.ModeHealthy,
+		})
+		writeJSON(w, http.StatusBadGateway, map[string]any{"error": "checkout failed"})
+		return
+	}
+
 	result, err := h.DB.Exec(
 		`INSERT INTO orders (amount, status) VALUES (?, ?)`,
 		req.TotalAmount,
@@ -156,16 +198,30 @@ func (h OrdersCreateHandler) createHealthyOrder(w http.ResponseWriter, r *http.R
 		"customer_email": req.CustomerEmail,
 		"total_amount":   req.TotalAmount,
 		"status":         status,
+		"product_id":     checkoutResult.Product.GetId(),
+		"transaction_id": checkoutResult.Transaction,
 	}})
 }
 
 func (h OrdersCreateHandler) respondDependencyFailure(w http.ResponseWriter, r *http.Request, req createOrderRequest, status string) {
-	time.Sleep(150 * time.Millisecond)
+	if h.Checkout == nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "checkout not configured"})
+		return
+	}
+
+	checkoutReq := h.checkoutRequest(req, status)
+	checkoutReq.PaymentAddrOverride = clients.DependencyFailPaymentAddr()
+
+	_, err := h.Checkout.Run(r.Context(), checkoutReq)
+	if err == nil {
+		writeJSON(w, http.StatusCreated, map[string]any{"data": map[string]any{"status": status}})
+		return
+	}
 
 	logOrderFault(r, http.StatusBadGateway, "Order creation failed: downstream payment unavailable", map[string]any{
 		"kind":       "DownstreamPaymentFailure",
-		"message":    "payment-service returned connection refused",
-		"root_cause": "Simulated payment-service outage; order-service cannot authorize charge",
+		"message":    err.Error(),
+		"root_cause": "Real gRPC charge to unreachable payment endpoint; order-service cannot authorize charge",
 	}, map[string]any{
 		"customer_email": req.CustomerEmail,
 		"total_amount":   req.TotalAmount,
@@ -179,12 +235,25 @@ func (h OrdersCreateHandler) respondDependencyFailure(w http.ResponseWriter, r *
 }
 
 func (h OrdersCreateHandler) respondDownstreamTimeout(w http.ResponseWriter, r *http.Request, req createOrderRequest, status string) {
-	time.Sleep(2 * time.Second)
+	if h.Checkout == nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "checkout not configured"})
+		return
+	}
+
+	checkoutReq := h.checkoutRequest(req, status)
+	checkoutReq.PaymentTimeoutOverride = clients.PaymentTimeout()
+	checkoutReq.PaymentSlowDemo = true
+
+	_, err := h.Checkout.Run(r.Context(), checkoutReq)
+	if err == nil {
+		writeJSON(w, http.StatusCreated, map[string]any{"data": map[string]any{"status": status}})
+		return
+	}
 
 	logOrderFault(r, http.StatusGatewayTimeout, "Order creation failed: downstream payment timeout", map[string]any{
 		"kind":       "DownstreamPaymentTimeout",
-		"message":    "payment-service did not respond within 2000ms",
-		"root_cause": "Simulated slow payment-service; upstream deadline exceeded",
+		"message":    err.Error(),
+		"root_cause": "Payment charge exceeded 500ms deadline (enable PAYMENT_DEMO_FAULT=slow on payment-service for reliable timeout)",
 	}, map[string]any{
 		"customer_email": req.CustomerEmail,
 		"total_amount":   req.TotalAmount,

@@ -1,0 +1,81 @@
+# Network isolation for aiden-demo:
+# - Pods may talk only to other pods in aiden-demo (checkout mesh + Datadog agent).
+# - DNS is allowed to kube-system only (CoreDNS / kube-dns).
+# - No egress to other namespaces, the Kubernetes API, link-local / EC2 metadata,
+#   or private RFC1918 ranges (in-cluster control plane and VPC endpoints).
+# - datadog-agent may additionally reach the public Datadog US3 intake on :443.
+#
+# Requires a CNI that enforces NetworkPolicy (Calico, Cilium, or EKS with policy
+# enforcement enabled). Apply with the rest of the stack:
+#   kubectl apply -f k8s/network-policy.yaml
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: aiden-demo-egress-isolation
+  namespace: aiden-demo
+  labels:
+    app.kubernetes.io/part-of: aiden-demo-stack
+spec:
+  podSelector: {}
+  policyTypes:
+    - Egress
+  egress:
+    # Checkout mesh, OTLP/APM to datadog-agent, CronJob -> order-service, etc.
+    - to:
+        - podSelector: {}
+    # Cluster DNS (kube-system only — not other namespaces).
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: datadog-agent-us3-egress
+  namespace: aiden-demo
+  labels:
+    app.kubernetes.io/part-of: aiden-demo-stack
+spec:
+  podSelector:
+    matchLabels:
+      app: datadog-agent
+  policyTypes:
+    - Egress
+  egress:
+    # Datadog US3 intake and other public HTTPS endpoints.
+    # Private RFC1918 + link-local (incl. 169.254.169.254 metadata) are excluded
+    # so the agent cannot reach the Kubernetes API or other in-VPC control plane.
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              - 10.0.0.0/8
+              - 172.16.0.0/12
+              - 192.168.0.0/16
+              - 169.254.0.0/16
+      ports:
+        - protocol: TCP
+          port: 443
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: aiden-demo-ingress-isolation
+  namespace: aiden-demo
+  labels:
+    app.kubernetes.io/part-of: aiden-demo-stack
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+  ingress:
+    # Only workloads inside aiden-demo may connect to each other.
+    - from:
+        - podSelector: {}

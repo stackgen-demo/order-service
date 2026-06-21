@@ -1,0 +1,25 @@
+# High fault noise for soak tests and monitor firing — shorter chaos intervals,
+# higher random failure rates on payment/catalog/ad.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: aiden-demo-fault-profile
+  namespace: aiden-demo
+  labels:
+    app.kubernetes.io/part-of: aiden-demo-stack
+data:
+  AIDEN_DEMO_FAULT_LEVEL: "noisy"
+
+  CHAOS_ENABLED: "true"
+  CHAOS_MIN_INTERVAL_SEC: "15"
+  CHAOS_MAX_INTERVAL_SEC: "60"
+  CHAOS_BURST_SIZE: "3"
+
+  PAYMENT_DEMO_FAULT: ""
+  PAYMENT_FAILURE_FRACTION: "0.5"
+  CATALOG_DEMO_FAULT: ""
+  CATALOG_FAILURE_FRACTION: "0.2"
+  AD_DEMO_FAULT: ""
+  AD_FAILURE_FRACTION: "0.25"
+
+  DEMO_FAULT: "schema"

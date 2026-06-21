@@ -8,6 +8,7 @@ metadata:
   labels:
     app.kubernetes.io/part-of: aiden-demo-stack
 spec:
+  suspend: true
   schedule: "*/2 * * * *"
   concurrencyPolicy: Forbid
   successfulJobsHistoryLimit: 1
@@ -20,9 +21,9 @@ spec:
           containers:
             - name: curl
               image: curlimages/curl:8.5.0
-              env:
-                - name: DEMO_FAULT
-                  value: schema
+              envFrom:
+                - configMapRef:
+                    name: aiden-demo-fault-profile
               command:
                 - sh
                 - -c
