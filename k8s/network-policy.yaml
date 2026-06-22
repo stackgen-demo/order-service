@@ -4,6 +4,8 @@
 # - No egress to other namespaces, the Kubernetes API, link-local / EC2 metadata,
 #   or private RFC1918 ranges (in-cluster control plane and VPC endpoints).
 # - datadog-agent may additionally reach the public Datadog US3 intake on :443.
+# - aiden-runner may additionally reach mothership HTTPS and the in-cluster Kubernetes API
+#   (kubernetes.default.svc ClusterIP on :443) for kubectl investigations.
 #
 # Requires a CNI that enforces NetworkPolicy (Calico, Cilium, or EKS with policy
 # enforcement enabled). Apply with the rest of the stack:
@@ -60,6 +62,63 @@ spec:
               - 172.16.0.0/12
               - 192.168.0.0/16
               - 169.254.0.0/16
+      ports:
+        - protocol: TCP
+          port: 443
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: aiden-runner-mothership-egress
+  namespace: aiden-demo
+  labels:
+    app.kubernetes.io/part-of: aiden-demo-stack
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: aiden-runner
+  policyTypes:
+    - Egress
+  egress:
+    # StackGen mothership / Dev Tunnel HTTPS. Private RFC1918 ranges are excluded
+    # so the runner cannot reach arbitrary in-VPC endpoints except via kube-api policy.
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              - 10.0.0.0/8
+              - 172.16.0.0/12
+              - 192.168.0.0/16
+              - 169.254.0.0/16
+      ports:
+        - protocol: TCP
+          port: 443
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: aiden-runner-kube-api-egress
+  namespace: aiden-demo
+  labels:
+    app.kubernetes.io/part-of: aiden-demo-stack
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: aiden-runner
+  policyTypes:
+    - Egress
+  egress:
+    # In-cluster kubernetes.default.svc (ClusterIP is in the service CIDR — commonly
+    # 172.20.0.0/16 on EKS; dial failures show as 172.20.0.1:443 i/o timeout).
+    - to:
+        - ipBlock:
+            cidr: 172.16.0.0/12
+      ports:
+        - protocol: TCP
+          port: 443
+    - to:
+        - ipBlock:
+            cidr: 10.0.0.0/8
       ports:
         - protocol: TCP
           port: 443
