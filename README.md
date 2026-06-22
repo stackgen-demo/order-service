@@ -258,7 +258,7 @@ Datadog Agent Deployment for APM traces and container log collection):
 | File | What it creates |
 |------|-----------------|
 | `k8s/stack.yaml` | Namespace, 1× Datadog Agent Deployment (APM + logs), `aiden-demo` Deployment + Services |
-| `k8s/network-policy.yaml` | Namespace isolation — no cross-namespace or control-plane egress; Datadog agent US3 only |
+| `k8s/network-policy.yaml` | Namespace isolation; Datadog agent US3 egress; aiden-runner mothership + kube-api egress |
 | `k8s/fault-profiles/*.yaml` | Shared `aiden-demo-fault-profile` ConfigMap presets (`quiet` / `normal` / `noisy`) |
 | `k8s/chaos-monkey.yaml` | Random checkout + leaf fault injection (reads fault profile) |
 | `k8s/datadog-secret.yaml` | Placeholder `datadog-secret` |
@@ -279,7 +279,10 @@ Datadog Agent Deployment for APM traces and container log collection):
 
 Blocked for app pods: other namespaces, the Kubernetes API, EC2 metadata
 (`169.254.169.254`), and private RFC1918 ranges. The **datadog-agent** may
-additionally egress to public **HTTPS (443)** for US3 intake.
+additionally egress to public **HTTPS (443)** for US3 intake. **aiden-runner**
+(Helm label `app.kubernetes.io/name: aiden-runner`) may additionally egress to
+public **HTTPS (443)** for mothership handshake and to **TCP 443** on private
+service-CIDR ranges for in-cluster `kubectl` (kubernetes.default.svc).
 
 On EKS, NetworkPolicy enforcement requires the VPC CNI addon with
 `enableNetworkPolicy: "true"` (once per cluster):
