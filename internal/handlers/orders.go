@@ -62,9 +62,6 @@ type createOrderRequest struct {
 }
 
 // ServeHTTP handles POST /api/orders.
-//
-// Default (no X-Demo-Fault header): schema mismatch 500 for RCA demos.
-// Other modes are selected via X-Demo-Fault on the request (see internal/fault).
 func (h OrdersCreateHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	mode, err := fault.ModeFromRequest(r)
 	if err != nil {
@@ -131,20 +128,17 @@ func (h OrdersCreateHandler) createSchemaMismatchOrder(w http.ResponseWriter, r 
 		status,
 	)
 	if err != nil {
-		logOrderFault(r, http.StatusInternalServerError, "Order creation failed: database schema mismatch", map[string]any{
-			"kind":       "DatabaseSchemaMismatch",
-			"message":    err.Error(),
-			"root_cause": "Application expects orders.customer_email and orders.total_amount but DB schema only has amount and status",
+		logOrderFault(r, http.StatusInternalServerError, "Order creation failed", map[string]any{
+			"kind":    "DatabaseError",
+			"message": err.Error(),
 		}, map[string]any{
 			"customer_email": req.CustomerEmail,
 			"total_amount":   req.TotalAmount,
 			"status":         status,
-			"demo_fault":     fault.ModeSchema,
 		})
 
-		writeJSON(w, http.StatusInternalServerError, map[string]any{
+		writeJSON(w, http.StatusInternalServerError, map[string]string{
 			"error": "internal server error",
-			"hint":  "orders table schema does not match application expectations",
 		})
 		return
 	}
@@ -179,7 +173,8 @@ func (h OrdersCreateHandler) createHealthyOrder(w http.ResponseWriter, r *http.R
 	}
 
 	result, err := h.DB.Exec(
-		`INSERT INTO orders (amount, status) VALUES (?, ?)`,
+		`INSERT INTO orders (customer_email, total_amount, status) VALUES (?, ?, ?)`,
+		req.CustomerEmail,
 		req.TotalAmount,
 		status,
 	)
@@ -187,7 +182,11 @@ func (h OrdersCreateHandler) createHealthyOrder(w http.ResponseWriter, r *http.R
 		logOrderFault(r, http.StatusInternalServerError, "Order creation failed", map[string]any{
 			"kind":    "DatabaseError",
 			"message": err.Error(),
-		}, map[string]any{"demo_fault": fault.ModeHealthy})
+		}, map[string]any{
+			"customer_email": req.CustomerEmail,
+			"total_amount":   req.TotalAmount,
+			"status":         status,
+		})
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal server error"})
 		return
 	}
