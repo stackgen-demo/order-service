@@ -31,6 +31,7 @@ type Config struct {
 	MinInterval   time.Duration
 	MaxInterval   time.Duration
 	BurstSize     int
+	FaultLevel    string
 	OrderURL      string
 	PaymentAddr   string
 	CatalogAddr   string
@@ -46,6 +47,7 @@ func LoadConfigFromEnv() Config {
 		MinInterval: time.Duration(minSec) * time.Second,
 		MaxInterval: time.Duration(maxSec) * time.Second,
 		BurstSize:   envInt("CHAOS_BURST_SIZE", 1),
+		FaultLevel:  envOrDefault("AIDEN_DEMO_FAULT_LEVEL", "normal"),
 		OrderURL:    envOrDefault("ORDER_SERVICE_URL", "http://aiden-demo"),
 		PaymentAddr: envOrDefault("PAYMENT_GRPC_ADDR", "payment-service:50051"),
 		CatalogAddr: envOrDefault("CATALOG_GRPC_ADDR", "product-catalog-service:3550"),
@@ -87,7 +89,7 @@ func (r *Runner) RunLoop(ctx context.Context) {
 
 func (r *Runner) executeOnce(ctx context.Context) {
 	mode := "checkout_saga"
-	if r.Rand.Intn(100) >= 60 {
+	if r.Rand.Intn(100) >= r.isolatedModeThreshold() {
 		mode = "isolated"
 	}
 
@@ -97,7 +99,7 @@ func (r *Runner) executeOnce(ctx context.Context) {
 	switch mode {
 	case "checkout_saga":
 		target = "order-service"
-		fault = r.pick([]string{"healthy", "dependency", "timeout", "schema"})
+		fault = r.checkoutFaultMode()
 		result, err = r.postOrder(ctx, fault)
 	default:
 		target = r.pick([]string{"payment-service", "product-catalog-service", "ad-service"})
@@ -237,6 +239,23 @@ func (r *Runner) randomInterval() time.Duration {
 
 func (r *Runner) pick(values []string) string {
 	return values[r.Rand.Intn(len(values))]
+}
+
+func (r *Runner) isolatedModeThreshold() int {
+	if r.Config.FaultLevel == "pr-demo" {
+		return 100
+	}
+	return 60
+}
+
+func (r *Runner) checkoutFaultMode() string {
+	if r.Config.FaultLevel == "pr-demo" {
+		if r.Rand.Intn(100) < 95 {
+			return "schema"
+		}
+		return "healthy"
+	}
+	return r.pick([]string{"healthy", "dependency", "timeout", "schema"})
 }
 
 func envOrDefault(key, fallback string) string {

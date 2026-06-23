@@ -1,0 +1,25 @@
+# Payment logic_bug PR demo — valid cards rejected by loyalty gate in charge.js.
+# Fire: ./scripts/run-incident-triage-demo.sh fire-payment-bug
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: aiden-demo-fault-profile
+  namespace: aiden-demo
+  labels:
+    app.kubernetes.io/part-of: aiden-demo-stack
+data:
+  AIDEN_DEMO_FAULT_LEVEL: "pr-payment-bug"
+
+  CHAOS_ENABLED: "false"
+  CHAOS_MIN_INTERVAL_SEC: "300"
+  CHAOS_MAX_INTERVAL_SEC: "600"
+  CHAOS_BURST_SIZE: "1"
+
+  PAYMENT_DEMO_FAULT: "logic_bug"
+  PAYMENT_FAILURE_FRACTION: "0"
+  CATALOG_DEMO_FAULT: ""
+  CATALOG_FAILURE_FRACTION: "0"
+  AD_DEMO_FAULT: ""
+  AD_FAILURE_FRACTION: "0"
+
+  DEMO_FAULT: "healthy"
