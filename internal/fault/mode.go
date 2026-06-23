@@ -21,12 +21,11 @@ const (
 	ModeHealthy    Mode = "healthy"
 )
 
-// ModeFromRequest reads X-Demo-Fault. Missing or empty header defaults to schema
-// so existing triggers keep the intentional schema-mismatch 500 without changes.
+// ModeFromRequest reads X-Demo-Fault. Missing or empty header defaults to healthy checkout.
 func ModeFromRequest(r *http.Request) (Mode, error) {
 	value := strings.TrimSpace(r.Header.Get(HeaderName))
 	if value == "" {
-		return ModeSchema, nil
+		return ModeHealthy, nil
 	}
 
 	mode := Mode(strings.ToLower(value))

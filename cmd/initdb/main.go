@@ -21,12 +21,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	fmt.Printf("Database initialized at %s\n\n", db.DBPath())
-	fmt.Println("Schema mismatch (intentional):")
-	fmt.Println("  App expects orders columns: customer_email, total_amount, status")
-	fmt.Println("  DB has orders columns:      amount, status")
-	fmt.Println()
-	fmt.Println("POST /api/orders will return HTTP 500 due to this mismatch.")
+	fmt.Printf("Database initialized at %s\n", db.DBPath())
 }
 
 func initSchema(database *sql.DB) error {
@@ -37,8 +32,6 @@ func initSchema(database *sql.DB) error {
 			email TEXT NOT NULL UNIQUE,
 			created_at TEXT NOT NULL DEFAULT (datetime('now'))
 		)`,
-		// INTENTIONAL BUG: schema does not match OrdersCreateHandler INSERT.
-		// Agent fix: add customer_email and total_amount columns here.
 		`CREATE TABLE IF NOT EXISTS orders (
 			id INTEGER PRIMARY KEY AUTOINCREMENT,
 			amount REAL NOT NULL,
