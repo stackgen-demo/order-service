@@ -41,8 +41,17 @@ for dep in aiden-chaos-monkey payment-service product-catalog-service ad-service
   kubectl -n "$NAMESPACE" rollout restart "deployment/${dep}"
 done
 
-for dep in aiden-chaos-monkey payment-service product-catalog-service ad-service; do
+if [[ "$LEVEL" == "quiet" || "$LEVEL" == "pr-demo" || "$LEVEL" == "pr-payment-bug" ]]; then
+  echo "==> scale chaos-monkey to 0 (${LEVEL} profile)"
+  kubectl -n "$NAMESPACE" scale deployment/aiden-chaos-monkey --replicas=0
+fi
+
+for dep in payment-service product-catalog-service ad-service; do
   kubectl -n "$NAMESPACE" rollout status "deployment/${dep}" --timeout=180s
 done
+
+if [[ "$LEVEL" != "quiet" && "$LEVEL" != "pr-demo" && "$LEVEL" != "pr-payment-bug" ]]; then
+  kubectl -n "$NAMESPACE" rollout status "deployment/aiden-chaos-monkey" --timeout=180s
+fi
 
 echo "fault level ${LEVEL} active (AIDEN_DEMO_FAULT_LEVEL in configmap aiden-demo-fault-profile)"
