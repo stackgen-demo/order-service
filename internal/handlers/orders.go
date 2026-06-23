@@ -253,7 +253,7 @@ func (h OrdersCreateHandler) respondDownstreamTimeout(w http.ResponseWriter, r *
 	logOrderFault(r, http.StatusGatewayTimeout, "Order creation failed: downstream payment timeout", map[string]any{
 		"kind":       "DownstreamPaymentTimeout",
 		"message":    err.Error(),
-		"root_cause": "Payment charge exceeded 500ms deadline (enable PAYMENT_DEMO_FAULT=slow on payment-service for reliable timeout)",
+		"root_cause": "Payment charge exceeded 5000ms deadline (enable PAYMENT_DEMO_FAULT=slow on payment-service for reliable timeout)",
 	}, map[string]any{
 		"customer_email": req.CustomerEmail,
 		"total_amount":   req.TotalAmount,

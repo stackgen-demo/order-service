@@ -105,7 +105,7 @@ func DialPaymentOnly(ctx context.Context, addr string) (pb.PaymentServiceClient,
 
 // PaymentTimeout returns the deadline used for timeout fault mode.
 func PaymentTimeout() time.Duration {
-	return 500 * time.Millisecond
+	return 5000 * time.Millisecond
 }
 
 func envOrDefault(key, fallback string) string {
