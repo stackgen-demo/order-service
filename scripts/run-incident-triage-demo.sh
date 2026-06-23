@@ -15,6 +15,8 @@
 #   ./scripts/run-incident-triage-demo.sh preflight
 #   ./scripts/run-incident-triage-demo.sh resume          # scale workloads up
 #   ./scripts/run-incident-triage-demo.sh fire-schema    # predictable 500 (schema mismatch)
+#   ./scripts/run-incident-triage-demo.sh fire-pr-demo   # quiet + schema (closed-loop PR on order-service)
+#   ./scripts/run-incident-triage-demo.sh fire-payment-bug  # logic_bug on payment-service (PR candidate)
 #   ./scripts/run-incident-triage-demo.sh fire-noisy     # chaos + leaf faults
 #   ./scripts/run-incident-triage-demo.sh fire-rank-commit  # bad commit → rank panic → RCA
 #   ./scripts/run-incident-triage-demo.sh commit-rca     # full: resume → fire-rank-commit
@@ -68,6 +70,56 @@ fire_schema() {
       -H "Content-Type: application/json" \
       -H "X-Demo-Fault: schema" \
       -d '{"customer_email":"demo@example.com","total_amount":42.50}'
+}
+
+fire_pr_demo() {
+  info "Closed-loop PR demo: quiet fault profile + schema mismatch on order-service"
+  "$ROOT/scripts/set-fault-level.sh" pr-demo
+  kubectl -n "$NAMESPACE" scale deployment/aiden-chaos-monkey --replicas=0 2>/dev/null || true
+  fire_schema
+  print_urls
+  cat <<EOF
+
+--- Closed-loop PR demo (order-service) ---
+
+Expected investigation path:
+  - Alert: order-service HTTP 5xx / DatabaseSchemaMismatch
+  - RCA file: stackgen-demo/order-service cmd/initdb/main.go
+  - remediation_plan.skipped_pr should be false (verified schema defect)
+  - HITL: Datadog writeback + GitHub fix PR on order-service
+
+EOF
+}
+
+fire_payment_bug() {
+  info "Payment logic_bug: valid Visa rejected by loyalty gate (PR candidate: charge.js)"
+  kubectl apply -f "$ROOT/k8s/fault-profiles/pr-payment-bug.yaml"
+  kubectl -n "$NAMESPACE" rollout restart deployment/payment-service product-catalog-service ad-service
+  for dep in payment-service product-catalog-service ad-service; do
+    kubectl -n "$NAMESPACE" rollout status "deployment/${dep}" --timeout=180s
+  done
+  kubectl -n "$NAMESPACE" scale deployment/aiden-chaos-monkey --replicas=0 2>/dev/null || true
+  info "Firing healthy checkout (exercises payment-service Charge)"
+  kubectl -n "$NAMESPACE" run demo-fire-payment-bug --rm -i --restart=Never \
+    --image=curlimages/curl:8.5.0 -- \
+    curl -sS -o /dev/null -w "HTTP %{http_code}\n" \
+      -X POST "http://aiden-demo/api/orders" \
+      -H "Content-Type: application/json" \
+      -H "X-Demo-Fault: healthy" \
+      -d '{"customer_email":"demo@example.com","total_amount":42.50,"product_id":"66VCHSJNUP"}'
+  cat <<EOF
+
+--- Payment logic_bug PR demo ---
+
+Datadog logs:
+  https://${DD_SITE}/logs?query=service%3Apayment-service%20env%3A${TRACKED_ENV}%20PaymentLogicBug
+
+GitHub fix target:
+  https://github.com/stackgen-demo/payment-service/blob/initial-setup/charge.js
+
+Note: deploy payment-service image with PAYMENT_DEMO_FAULT support before investigating.
+
+EOF
 }
 
 fire_noisy() {
@@ -131,6 +183,8 @@ preflight() {
 case "$cmd" in
   resume) resume_stack ;;
   fire-schema) fire_schema ;;
+  fire-pr-demo) fire_pr_demo ;;
+  fire-payment-bug) fire_payment_bug ;;
   fire-noisy) fire_noisy ;;
   fire-rank-commit)
     info "--- Bad Commit → Alert → Aiden RCA demo ---"
