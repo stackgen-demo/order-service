@@ -1,0 +1,24 @@
+apiVersion: system-model.autodesk.com/1.0.0
+kind: component
+metadata:
+  name: order-service
+  namespace: stackgen-demo
+  title: Order Service
+  description: Datadog-based application for alert and monitoring of order processing
+  computeProvider: kubernetes
+  deploymentProvider: github-actions
+  languages:
+    - go
+  runtimes: go
+  sourceRepositories: https://github.com/stackgen-demo/order-service
+  operationalPurpose: production
+  serviceTier: 1
+spec:
+  type: service
+  lifecycle: production
+  owner: group:stackgen-demo
+  partOf: system:stackgen-demo/order-system
+  dependsOn:
+    - component:stackgen-demo/payment-service
+    - component:stackgen-demo/product-catalog-service
+    - component:stackgen-demo/ad-service
