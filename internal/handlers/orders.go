@@ -320,7 +320,7 @@ func (h OrdersCreateHandler) createWithLockedContention(w http.ResponseWriter, r
 // can match DatabaseSchemaMismatch on the healthy checkout path (no X-Demo-Fault header).
 func (h OrdersCreateHandler) databaseErrorFields(err error) map[string]any {
 	message := err.Error()
-	if strings.Contains(message, "no such column") {
+	if strings.Contains(message, "no such column") || strings.Contains(message, "has no column named") {
 		return map[string]any{
 			"kind":       "DatabaseSchemaMismatch",
 			"message":    message,

@@ -49,7 +49,7 @@ func main() {
 		"port": port,
 		"addr": addr,
 	})
-	logger.Info("POST /api/orders default fault mode is schema mismatch (HTTP 500)", nil)
+	logger.Info("POST /api/orders without X-Demo-Fault runs healthy checkout (schema drift on main surfaces as DatabaseSchemaMismatch)", nil)
 
 	if err := http.ListenAndServe(addr, handler); err != nil {
 		logger.Error("server failed", map[string]any{"error": err.Error()})
