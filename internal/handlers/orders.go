@@ -128,10 +128,7 @@ func (h OrdersCreateHandler) createSchemaMismatchOrder(w http.ResponseWriter, r 
 		status,
 	)
 	if err != nil {
-		logOrderFault(r, http.StatusInternalServerError, "Order creation failed", map[string]any{
-			"kind":    "DatabaseError",
-			"message": err.Error(),
-		}, map[string]any{
+		logOrderFault(r, http.StatusInternalServerError, "Order creation failed", h.databaseErrorFields(err), map[string]any{
 			"customer_email": req.CustomerEmail,
 			"total_amount":   req.TotalAmount,
 			"status":         status,
@@ -179,10 +176,7 @@ func (h OrdersCreateHandler) createHealthyOrder(w http.ResponseWriter, r *http.R
 		status,
 	)
 	if err != nil {
-		logOrderFault(r, http.StatusInternalServerError, "Order creation failed", map[string]any{
-			"kind":    "DatabaseError",
-			"message": err.Error(),
-		}, map[string]any{
+		logOrderFault(r, http.StatusInternalServerError, "Order creation failed", h.databaseErrorFields(err), map[string]any{
 			"customer_email": req.CustomerEmail,
 			"total_amount":   req.TotalAmount,
 			"status":         status,
@@ -320,6 +314,24 @@ func (h OrdersCreateHandler) createWithLockedContention(w http.ResponseWriter, r
 		"error": "internal server error",
 		"hint":  "database is locked",
 	})
+}
+
+// databaseErrorFields classifies SQLite schema drift so Datadog monitors and SRE investigations
+// can match DatabaseSchemaMismatch on the healthy checkout path (no X-Demo-Fault header).
+func (h OrdersCreateHandler) databaseErrorFields(err error) map[string]any {
+	message := err.Error()
+	if strings.Contains(message, "no such column") {
+		return map[string]any{
+			"kind":       "DatabaseSchemaMismatch",
+			"message":    message,
+			"root_cause": "Application INSERT references columns missing from orders table — update cmd/initdb/main.go schema",
+		}
+	}
+
+	return map[string]any{
+		"kind":    "DatabaseError",
+		"message": message,
+	}
 }
 
 func logOrderFault(r *http.Request, status int, message string, errFields map[string]any, context map[string]any) {

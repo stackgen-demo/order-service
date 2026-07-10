@@ -21,7 +21,8 @@ const (
 	ModeHealthy    Mode = "healthy"
 )
 
-// ModeFromRequest reads X-Demo-Fault. Missing or empty header defaults to healthy checkout.
+// ModeFromRequest reads X-Demo-Fault. Missing or empty header defaults to healthy checkout
+// so production traffic exercises the full saga (realistic closed-loop PR demos on main).
 func ModeFromRequest(r *http.Request) (Mode, error) {
 	value := strings.TrimSpace(r.Header.Get(HeaderName))
 	if value == "" {

@@ -1,5 +1,6 @@
-# Closed-loop PR demo — chaos off, no leaf noise. Fire schema mismatch manually:
-#   ./scripts/run-incident-triage-demo.sh fire-pr-demo
+# Closed-loop PR demo — chaos off, no synthetic X-Demo-Fault header required.
+# Pair with deploy-aiden-demo-ci.sh (main / :latest image) and
+# run-incident-triage-demo.sh fire-commit-pr-demo.
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -22,4 +23,4 @@ data:
   AD_DEMO_FAULT: ""
   AD_FAILURE_FRACTION: "0"
 
-  DEMO_FAULT: "schema"
+  DEMO_FAULT: "healthy"

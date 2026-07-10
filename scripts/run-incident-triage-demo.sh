@@ -14,8 +14,10 @@
 # Usage:
 #   ./scripts/run-incident-triage-demo.sh preflight
 #   ./scripts/run-incident-triage-demo.sh resume          # scale workloads up
-#   ./scripts/run-incident-triage-demo.sh fire-schema    # predictable 500 (schema mismatch)
-#   ./scripts/run-incident-triage-demo.sh fire-pr-demo   # quiet + schema (closed-loop PR on order-service)
+#   ./scripts/run-incident-triage-demo.sh fire-schema    # predictable 500 (schema mismatch header)
+#   ./scripts/run-incident-triage-demo.sh fire-pr-demo   # quiet + schema header (synthetic)
+#   ./scripts/run-incident-triage-demo.sh fire-commit-pr-demo  # deploy main image → real schema alert → GitHub PR
+#   ./scripts/run-incident-triage-demo.sh commit-pr-demo     # resume + fire-commit-pr-demo
 #   ./scripts/run-incident-triage-demo.sh fire-payment-bug  # logic_bug on payment-service (PR candidate)
 #   ./scripts/run-incident-triage-demo.sh fire-noisy     # chaos + leaf faults
 #   ./scripts/run-incident-triage-demo.sh fire-rank-commit  # bad commit → rank panic → RCA
@@ -73,20 +75,16 @@ fire_schema() {
 }
 
 fire_pr_demo() {
-  info "Closed-loop PR demo: quiet fault profile + schema mismatch on order-service"
+  info "Synthetic schema demo: quiet fault profile + X-Demo-Fault: schema"
   "$ROOT/scripts/set-fault-level.sh" pr-demo
   kubectl -n "$NAMESPACE" scale deployment/aiden-chaos-monkey --replicas=0 2>/dev/null || true
   fire_schema
   print_urls
   cat <<EOF
 
---- Closed-loop PR demo (order-service) ---
+--- Synthetic schema demo (order-service) ---
 
-Expected investigation path:
-  - Alert: order-service HTTP 5xx / DatabaseSchemaMismatch
-  - RCA file: stackgen-demo/order-service cmd/initdb/main.go
-  - remediation_plan.skipped_pr should be false (verified schema defect)
-  - HITL: Datadog writeback + GitHub fix PR on order-service
+Uses X-Demo-Fault: schema (skips checkout saga). Prefer fire-commit-pr-demo for realistic main-branch demos.
 
 EOF
 }
@@ -118,6 +116,48 @@ GitHub fix target:
   https://github.com/stackgen-demo/payment-service/blob/initial-setup/charge.js
 
 Note: deploy payment-service image with PAYMENT_DEMO_FAULT support before investigating.
+
+EOF
+}
+
+fire_commit_pr_demo() {
+  info "Realistic developer-commit demo: main deployed without schema migration"
+  "$ROOT/scripts/deploy-aiden-demo-ci.sh"
+  "$ROOT/scripts/set-fault-level.sh" pr-demo
+  kubectl -n "$NAMESPACE" scale deployment/aiden-chaos-monkey --replicas=0 2>/dev/null || true
+
+  info "Simulating production checkout (no X-Demo-Fault header — real code path)"
+  kubectl -n "$NAMESPACE" run demo-fire-commit-pr --rm -i --restart=Never \
+    --image=curlimages/curl:8.5.0 -- \
+    curl -sS -o /dev/null -w "HTTP %{http_code}\n" \
+      -X POST "http://aiden-demo/api/orders" \
+      -H "Content-Type: application/json" \
+      -d '{"customer_email":"demo@example.com","total_amount":42.50,"product_id":"66VCHSJNUP","credit_card_number":"4242424242424242","credit_card_cvv":123,"credit_card_expiration_year":2030,"credit_card_expiration_month":12}'
+
+  MAIN_SHA=""
+  if command -v gh >/dev/null 2>&1; then
+    MAIN_SHA="$(gh api '/repos/stackgen-demo/order-service/commits?sha=main&per_page=1' --jq '.[0].sha' 2>/dev/null | cut -c1-7 || true)"
+  fi
+
+  print_urls
+  cat <<EOF
+
+--- Developer commit → alert → GitHub fix PR (order-service) ---
+
+Story for the audience:
+  1. Developer merged customer-email persistence on main — handler writes customer_email but initdb schema was not updated.
+  2. CI deployed ghcr.io/stackgen-demo/order-service:latest (main) to aiden-demo.
+  3. Healthy checkout traffic hits DatabaseSchemaMismatch (no synthetic fault header).
+
+GitHub commit to show before Investigate:
+  https://github.com/stackgen-demo/order-service/commits/main
+$(if [[ -n "$MAIN_SHA" ]]; then echo "  Latest main: https://github.com/stackgen-demo/order-service/commit/${MAIN_SHA}"; fi)
+
+Expected investigation path:
+  - Datadog: service:order-service env:demo DatabaseSchemaMismatch
+  - GitHub: recent commit on main correlates with schema drift in internal/handlers/orders.go vs cmd/initdb/main.go
+  - Fix PR target: cmd/initdb/main.go (add customer_email, total_amount columns)
+  - HITL: Datadog writeback then GitHub PR (enable_policies=true in datadog-aws-rca)
 
 EOF
 }
@@ -185,6 +225,11 @@ case "$cmd" in
   fire-schema) fire_schema ;;
   fire-pr-demo) fire_pr_demo ;;
   fire-payment-bug) fire_payment_bug ;;
+  fire-commit-pr-demo) fire_commit_pr_demo ;;
+  commit-pr-demo)
+    resume_stack
+    fire_commit_pr_demo
+    ;;
   fire-noisy) fire_noisy ;;
   fire-rank-commit)
     info "--- Bad Commit → Alert → Aiden RCA demo ---"
