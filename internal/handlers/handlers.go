@@ -71,6 +71,7 @@ func logRequest(ctx context.Context, r *http.Request, status int, duration time.
 			"status_code": status,
 			"method":      r.Method,
 			"url":         r.URL.Path,
+			"query":       r.URL.RawQuery,
 		},
 		"duration_ms": duration.Milliseconds(),
 	}
@@ -105,9 +106,9 @@ func withRecovery(next http.Handler) http.Handler {
 				},
 			})
 
-			writeJSON(w, http.StatusInternalServerError, map[string]string{
-				"error": "internal server error",
-			})
+		writeJSON(w, http.StatusInternalServerError, map[string]string{
+			"error": "internal server error",
+		})
 		}()
 
 		next.ServeHTTP(w, r)

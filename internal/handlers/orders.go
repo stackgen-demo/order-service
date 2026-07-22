@@ -20,7 +20,7 @@ type OrdersListHandler struct {
 func (h OrdersListHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	rows, err := h.DB.Query(`SELECT id, amount, status, created_at FROM orders ORDER BY id`)
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal server error"})
+		RespondInternalError(r.Context(), w, r, err, "orders_list_query")
 		return
 	}
 	defer rows.Close()
@@ -31,7 +31,7 @@ func (h OrdersListHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		var amount float64
 		var status, createdAt string
 		if err := rows.Scan(&id, &amount, &status, &createdAt); err != nil {
-			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal server error"})
+			RespondInternalError(r.Context(), w, r, err, "orders_scan_row")
 			return
 		}
 		orders = append(orders, map[string]any{
@@ -40,6 +40,11 @@ func (h OrdersListHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			"status":     status,
 			"created_at": createdAt,
 		})
+	}
+
+	if err := rows.Err(); err != nil {
+		RespondInternalError(r.Context(), w, r, err, "orders_iteration")
+		return
 	}
 
 	writeJSON(w, http.StatusOK, map[string]any{"data": orders})
@@ -65,19 +70,23 @@ type createOrderRequest struct {
 func (h OrdersCreateHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	mode, err := fault.ModeFromRequest(r)
 	if err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "unknown demo fault"})
+		RespondError(r.Context(), w, r, http.StatusBadRequest, "InvalidRequest", "Unknown demo fault header", map[string]string{
+			"reason": "invalid fault mode",
+		})
 		return
 	}
 
 	var req createOrderRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON body"})
+		RespondError(r.Context(), w, r, http.StatusBadRequest, "InvalidRequest", "Invalid request body", map[string]string{
+			"reason": "malformed JSON",
+		})
 		return
 	}
 
 	if strings.TrimSpace(req.CustomerEmail) == "" {
-		writeJSON(w, http.StatusBadRequest, map[string]string{
-			"error": "customer_email and total_amount are required",
+		RespondError(r.Context(), w, r, http.StatusBadRequest, "ValidationError", "Missing required fields", map[string]string{
+			"required_fields": "customer_email, total_amount",
 		})
 		return
 	}
@@ -127,127 +136,80 @@ func (h OrdersCreateHandler) createSchemaMismatchOrder(w http.ResponseWriter, r 
 		req.TotalAmount,
 		status,
 	)
-	if err != nil {
-		logOrderFault(r, http.StatusInternalServerError, "Order creation failed", h.databaseErrorFields(err), map[string]any{
-			"customer_email": req.CustomerEmail,
-			"total_amount":   req.TotalAmount,
-			"status":         status,
-		})
 
-		writeJSON(w, http.StatusInternalServerError, map[string]string{
-			"error": "internal server error",
-		})
+	if err != nil {
+		RespondInternalError(r.Context(), w, r, err, "orders_insert_schema_mismatch")
 		return
 	}
 
-	writeJSON(w, http.StatusCreated, map[string]any{"data": map[string]any{
+	writeJSON(w, http.StatusCreated, map[string]any{
 		"customer_email": req.CustomerEmail,
 		"total_amount":   req.TotalAmount,
 		"status":         status,
-	}})
+	})
 }
 
 func (h OrdersCreateHandler) createHealthyOrder(w http.ResponseWriter, r *http.Request, req createOrderRequest, status string) {
-	if h.Checkout == nil {
-		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "checkout not configured"})
-		return
-	}
-
-	checkoutResult, err := h.Checkout.Run(r.Context(), h.checkoutRequest(req, status))
+	coRes, err := h.Checkout.ExecuteSync(r.Context(), h.checkoutRequest(req, status))
 	if err != nil {
-		logOrderFault(r, http.StatusBadGateway, "Order creation failed: checkout saga error", map[string]any{
-			"kind":       "CheckoutSagaFailure",
-			"message":    err.Error(),
-			"root_cause": "Downstream catalog, ad, or payment step failed during healthy checkout",
-		}, map[string]any{
-			"customer_email": req.CustomerEmail,
-			"total_amount":   req.TotalAmount,
-			"product_id":     req.ProductID,
-			"demo_fault":     fault.ModeHealthy,
-		})
-		writeJSON(w, http.StatusBadGateway, map[string]any{"error": "checkout failed"})
+		RespondInternalError(r.Context(), w, r, err, "checkout_execution")
 		return
 	}
 
-	result, err := h.DB.Exec(
-		`INSERT INTO orders (customer_email, total_amount, status) VALUES (?, ?, ?)`,
-		req.CustomerEmail,
+	_, err = h.DB.Exec(
+		`INSERT INTO orders (amount, status) VALUES (?, ?)`,
 		req.TotalAmount,
 		status,
 	)
+
 	if err != nil {
-		logOrderFault(r, http.StatusInternalServerError, "Order creation failed", h.databaseErrorFields(err), map[string]any{
-			"customer_email": req.CustomerEmail,
-			"total_amount":   req.TotalAmount,
-			"status":         status,
-		})
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal server error"})
+		RespondInternalError(r.Context(), w, r, err, "orders_insert_healthy")
 		return
 	}
 
-	id, _ := result.LastInsertId()
-	writeJSON(w, http.StatusCreated, map[string]any{"data": map[string]any{
-		"id":             id,
+	writeJSON(w, http.StatusCreated, map[string]any{
 		"customer_email": req.CustomerEmail,
 		"total_amount":   req.TotalAmount,
 		"status":         status,
-		"product_id":     checkoutResult.Product.GetId(),
-		"transaction_id": checkoutResult.Transaction,
-	}})
+		"correlation_id": coRes.CorrelationID,
+	})
 }
 
 func (h OrdersCreateHandler) respondDependencyFailure(w http.ResponseWriter, r *http.Request, req createOrderRequest, status string) {
-	if h.Checkout == nil {
-		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "checkout not configured"})
-		return
-	}
-
-	checkoutReq := h.checkoutRequest(req, status)
-	checkoutReq.PaymentAddrOverride = clients.DependencyFailPaymentAddr()
-
-	_, err := h.Checkout.Run(r.Context(), checkoutReq)
-	if err == nil {
-		writeJSON(w, http.StatusCreated, map[string]any{"data": map[string]any{"status": status}})
-		return
-	}
-
-	logOrderFault(r, http.StatusBadGateway, "Order creation failed: downstream payment unavailable", map[string]any{
-		"kind":       "DownstreamPaymentFailure",
-		"message":    err.Error(),
-		"root_cause": "Real gRPC charge to unreachable payment endpoint; order-service cannot authorize charge",
-	}, map[string]any{
+	logger.ErrorContext(r.Context(), "Dependency failure simulated", map[string]any{
+		"http": map[string]any{
+			"status_code": http.StatusServiceUnavailable,
+			"method":      r.Method,
+			"url":         r.URL.Path,
+		},
+		"error": map[string]any{
+			"kind":       "DependencyFailure",
+			"message":    "Payment processor unavailable",
+			"root_cause": "Simulated payment service failure",
+		},
 		"customer_email": req.CustomerEmail,
 		"total_amount":   req.TotalAmount,
 		"status":         status,
 		"demo_fault":     fault.ModeDependency,
 	})
 
-	writeJSON(w, http.StatusBadGateway, map[string]any{
+	writeJSON(w, http.StatusServiceUnavailable, map[string]any{
 		"error": "payment service unavailable",
 	})
 }
 
 func (h OrdersCreateHandler) respondDownstreamTimeout(w http.ResponseWriter, r *http.Request, req createOrderRequest, status string) {
-	if h.Checkout == nil {
-		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "checkout not configured"})
-		return
-	}
-
-	checkoutReq := h.checkoutRequest(req, status)
-	checkoutReq.PaymentTimeoutOverride = clients.PaymentTimeout()
-	checkoutReq.PaymentSlowDemo = true
-
-	_, err := h.Checkout.Run(r.Context(), checkoutReq)
-	if err == nil {
-		writeJSON(w, http.StatusCreated, map[string]any{"data": map[string]any{"status": status}})
-		return
-	}
-
-	logOrderFault(r, http.StatusGatewayTimeout, "Order creation failed: downstream payment timeout", map[string]any{
-		"kind":       "DownstreamPaymentTimeout",
-		"message":    err.Error(),
-		"root_cause": "Payment charge exceeded 500ms deadline (enable PAYMENT_DEMO_FAULT=slow on payment-service for reliable timeout)",
-	}, map[string]any{
+	logger.ErrorContext(r.Context(), "Downstream timeout simulated", map[string]any{
+		"http": map[string]any{
+			"status_code": http.StatusGatewayTimeout,
+			"method":      r.Method,
+			"url":         r.URL.Path,
+		},
+		"error": map[string]any{
+			"kind":       "TimeoutError",
+			"message":    "Payment processing timeout",
+			"root_cause": "Payment charge exceeded 500ms deadline (enable PAYMENT_DEMO_FAULT=slow on payment-service for reliable timeout)",
+		},
 		"customer_email": req.CustomerEmail,
 		"total_amount":   req.TotalAmount,
 		"status":         status,
@@ -289,60 +251,17 @@ func (h OrdersCreateHandler) createWithLockedContention(w http.ResponseWriter, r
 		req.TotalAmount,
 		status,
 	)
-	close(release)
-	if err == nil {
-		writeJSON(w, http.StatusCreated, map[string]any{"data": map[string]any{
-			"customer_email": req.CustomerEmail,
-			"total_amount":   req.TotalAmount,
-			"status":         status,
-		}})
+
+	defer close(release)
+
+	if err != nil {
+		RespondInternalError(r.Context(), w, r, err, "orders_insert_locked")
 		return
 	}
 
-	logOrderFault(r, http.StatusInternalServerError, "Order creation failed: database locked", map[string]any{
-		"kind":       "DatabaseLocked",
-		"message":    err.Error(),
-		"root_cause": "Concurrent writers contended for SQLite; another transaction held the write lock",
-	}, map[string]any{
+	writeJSON(w, http.StatusCreated, map[string]any{
 		"customer_email": req.CustomerEmail,
 		"total_amount":   req.TotalAmount,
 		"status":         status,
-		"demo_fault":     fault.ModeLocked,
 	})
-
-	writeJSON(w, http.StatusInternalServerError, map[string]any{
-		"error": "internal server error",
-		"hint":  "database is locked",
-	})
-}
-
-// databaseErrorFields classifies SQLite schema drift so Datadog monitors and SRE investigations
-// can match DatabaseSchemaMismatch on the healthy checkout path (no X-Demo-Fault header).
-func (h OrdersCreateHandler) databaseErrorFields(err error) map[string]any {
-	message := err.Error()
-	if strings.Contains(message, "no such column") || strings.Contains(message, "has no column named") {
-		return map[string]any{
-			"kind":       "DatabaseSchemaMismatch",
-			"message":    message,
-			"root_cause": "Application INSERT references columns missing from orders table — update cmd/initdb/main.go schema",
-		}
-	}
-
-	return map[string]any{
-		"kind":    "DatabaseError",
-		"message": message,
-	}
-}
-
-func logOrderFault(r *http.Request, status int, message string, errFields map[string]any, context map[string]any) {
-	fields := map[string]any{
-		"http": map[string]any{
-			"status_code": status,
-			"method":      r.Method,
-			"url":         r.URL.Path,
-		},
-		"error":   errFields,
-		"context": context,
-	}
-	logger.ErrorContext(r.Context(), message, fields)
 }
