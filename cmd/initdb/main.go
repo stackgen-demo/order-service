@@ -34,7 +34,8 @@ func initSchema(database *sql.DB) error {
 		)`,
 		`CREATE TABLE IF NOT EXISTS orders (
 			id INTEGER PRIMARY KEY AUTOINCREMENT,
-			amount REAL NOT NULL,
+			customer_email TEXT NOT NULL,
+			total_amount REAL NOT NULL,
 			status TEXT NOT NULL DEFAULT 'pending',
 			created_at TEXT NOT NULL DEFAULT (datetime('now'))
 		)`,
